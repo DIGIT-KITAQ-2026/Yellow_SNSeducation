@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Node (used only to run the Supabase CLI via npx)
+node_modules/
+
+# Supabase local env
+supabase/.temp/
+.env
