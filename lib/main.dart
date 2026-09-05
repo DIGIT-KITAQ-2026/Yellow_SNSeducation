@@ -22,11 +22,11 @@ Future<void> main() async {
       publishableKey: SupabaseConfig.anonKey,
     );
   }
-  runApp(const MyApp());
+  runApp(const YellowSnsEducationApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class YellowSnsEducationApp extends StatelessWidget {
+  const YellowSnsEducationApp({super.key});
 
   @override
   Widget build(BuildContext context) {

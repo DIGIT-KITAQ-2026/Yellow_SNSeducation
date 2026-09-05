@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/signup_draft.dart';
 import '../services/auth_service.dart';
 import '../supabase_config.dart';
-import '../theme/app_colors.dart';
 import '../utils/auth_errors.dart';
 import '../utils/validators.dart';
-import '../widgets/app_text_field.dart';
-import '../widgets/primary_button.dart';
 import 'account_type_dialog.dart';
+
+const _cyan = Color(0xFF33F7FF);
 
 /// Screen ① of the wireframe (初期画面・親子共通): email/password login,
 /// entry point into the 新規登録 flow, plus test login shortcuts for the
@@ -78,95 +77,176 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  InputDecoration _fieldDecoration(String label, IconData icon, {String? errorText}) {
+    return InputDecoration(
+      labelText: label,
+      errorText: errorText,
+      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+      errorStyle: const TextStyle(color: Colors.redAccent),
+      prefixIcon: Icon(icon, color: _cyan),
+      filled: true,
+      fillColor: Colors.white.withValues(alpha: 0.06),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+        borderSide: BorderSide(color: _cyan, width: 2),
+      ),
+      border: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF141416), Color(0xFF2A2A2E)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.auto_awesome, color: AppColors.accent, size: 40),
+                  const Icon(Icons.auto_awesome, size: 56, color: _cyan),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'アカウントログイン',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  const SizedBox(height: 32),
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration(
+                      'メールアドレス',
+                      Icons.mail_outline,
+                      errorText: _emailError,
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  AppTextField(
-                    controller: _emailController,
-                    label: 'メールアドレス',
-                    icon: Icons.mail_outline,
-                    keyboardType: TextInputType.emailAddress,
-                    errorText: _emailError,
-                  ),
-                  const SizedBox(height: 12),
-                  AppTextField(
+                  const SizedBox(height: 16),
+                  TextField(
                     controller: _passwordController,
-                    label: 'パスワード',
-                    icon: Icons.lock_outline,
                     obscureText: true,
-                    errorText: _passwordError,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: _fieldDecoration(
+                      'パスワード',
+                      Icons.lock_outline,
+                      errorText: _passwordError,
+                    ),
                   ),
                   if (_formError != null) ...[
                     const SizedBox(height: 12),
                     Text(
                       _formError!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.error, fontSize: 12),
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Row(
                     children: [
                       Expanded(
-                        child: SecondaryButton(
-                          label: '新規',
+                        child: OutlinedButton(
                           onPressed: _busy ? null : _handleNewAccount,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: _cyan),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('新規'),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: PrimaryButton(
-                          label: _busy ? '処理中...' : 'ログイン',
+                        child: ElevatedButton(
                           onPressed: _busy ? null : _handleLogin,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _cyan,
+                            foregroundColor: const Color(0xFF0B0A24),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(_busy ? '処理中...' : 'ログイン'),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
-                  const Text(
+                  const SizedBox(height: 24),
+                  Text(
                     'テスト用ログイン(登録済みのデモアカウント)',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.5)),
                   ),
                   const SizedBox(height: 8),
-                  SecondaryButton(
-                    label: '保護者としてテストログイン',
-                    onPressed: _busy ? null : () => _testLogin(SupabaseConfig.testParentEmail),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed:
+                          _busy ? null : () => _testLogin(SupabaseConfig.testParentEmail),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('保護者としてテストログイン'),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
-                        child: SecondaryButton(
-                          label: '子供1としてテストログイン',
-                          onPressed: _busy ? null : () => _testLogin(SupabaseConfig.testChild1Email),
+                        child: OutlinedButton(
+                          onPressed: _busy
+                              ? null
+                              : () => _testLogin(SupabaseConfig.testChild1Email),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('子供1としてテストログイン'),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: SecondaryButton(
-                          label: '子供2としてテストログイン',
-                          onPressed: _busy ? null : () => _testLogin(SupabaseConfig.testChild2Email),
+                        child: OutlinedButton(
+                          onPressed: _busy
+                              ? null
+                              : () => _testLogin(SupabaseConfig.testChild2Email),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('子供2としてテストログイン'),
                         ),
                       ),
                     ],

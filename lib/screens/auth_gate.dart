@@ -3,10 +3,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import '../services/session_bridge.dart';
 import '../theme/app_colors.dart';
 import '../widgets/primary_button.dart';
-import 'home_screen.dart';
 import 'login_screen.dart';
+import 'main_shell.dart';
 
 /// Root route: shows the login screen or the home screen depending on the
 /// current session, so no screen has to navigate on sign-in/sign-out itself.
@@ -40,7 +41,20 @@ class _ProfileLoader extends StatefulWidget {
 }
 
 class _ProfileLoaderState extends State<_ProfileLoader> {
-  late Future<UserProfile?> _profile = AuthService.fetchProfile();
+  late Future<UserProfile?> _profile = _loadAndHydrate();
+
+  Future<UserProfile?> _loadAndHydrate() async {
+    final profile = await AuthService.fetchProfile();
+    if (profile == null) return null;
+
+    final children = await AuthService.fetchGroupChildren(profile.groupId);
+    SessionBridge.hydrate(
+      profile: profile,
+      children: children,
+      email: AuthService.currentUser?.email,
+    );
+    return profile;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +77,7 @@ class _ProfileLoaderState extends State<_ProfileLoader> {
                 const SizedBox(height: 20),
                 PrimaryButton(
                   label: '再試行',
-                  onPressed: () => setState(() => _profile = AuthService.fetchProfile()),
+                  onPressed: () => setState(() => _profile = _loadAndHydrate()),
                 ),
               ],
             ),
@@ -90,7 +104,7 @@ class _ProfileLoaderState extends State<_ProfileLoader> {
           );
         }
 
-        return HomeScreen(profile: profile);
+        return const MainShell();
       },
     );
   }

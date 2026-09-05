@@ -10,6 +10,7 @@ class AuthService {
 
   static Stream<AuthState> get onAuthStateChange => _client.auth.onAuthStateChange;
   static Session? get currentSession => _client.auth.currentSession;
+  static User? get currentUser => _client.auth.currentUser;
 
   /// Bumped once a profile is created, so AuthGate re-runs [fetchProfile]
   /// instead of holding on to the empty result it got mid-signup.
@@ -69,5 +70,27 @@ class AuthService {
         .maybeSingle();
 
     return row == null ? null : UserProfile.fromJson(row);
+  }
+
+  /// The child rows of [groupId], for the parent's 子ども切替え and the
+  /// quest/gift screens. RLS (profiles_select_group) lets any group member
+  /// read every profile in their own group.
+  static Future<List<({String id, String name, int points})>> fetchGroupChildren(
+    String groupId,
+  ) async {
+    final rows = await _client
+        .from('profiles')
+        .select('id, display_name, point_balance')
+        .eq('group_id', groupId)
+        .eq('role', 'child');
+
+    return [
+      for (final row in rows as List)
+        (
+          id: row['id'] as String,
+          name: row['display_name'] as String,
+          points: row['point_balance'] as int,
+        ),
+    ];
   }
 }
