@@ -17,16 +17,7 @@ class SignupDraft {
   /// Parent only: the group's name, entered on screen ③.
   final String? groupName;
 
-  /// Parent: the randomly generated 4-digit code shown on screen ③.
-  /// Child: the 4-digit code the user typed in to join a group.
+  /// Child only: the 4-digit code the user typed in to join a group.
+  /// The parent's code doesn't exist until create_parent_account has run.
   final String? groupCode;
-
-  SignupDraft copyWith({String? groupCode}) {
-    return SignupDraft(
-      role: role,
-      displayName: displayName,
-      groupName: groupName,
-      groupCode: groupCode ?? this.groupCode,
-    );
-  }
 }

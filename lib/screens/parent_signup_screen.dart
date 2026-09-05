@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import '../models/signup_draft.dart';
@@ -9,13 +7,12 @@ import '../widgets/group_code_boxes.dart';
 import '../widgets/primary_button.dart';
 import 'credentials_screen.dart';
 
-/// Screen ③ (parent side) of the wireframe (親アカウント作成): group name,
-/// plus the group code that gets generated once 決定 is pressed.
+/// Screen ③ (parent side) of the wireframe (親アカウント作成): group name.
 ///
 /// The 決定 button is enabled purely on グループ名 being filled in, matching
-/// the wireframe note. The actual random code will be issued by the backend
-/// (create_parent_account RPC) later; here a placeholder is generated
-/// locally just so the flow can be tried end-to-end.
+/// the wireframe note. The group code is issued by the create_parent_account
+/// RPC, which can only run once the account exists, so it stays blank here
+/// and is shown at the end of the credentials step instead.
 class ParentSignupScreen extends StatefulWidget {
   const ParentSignupScreen({super.key});
 
@@ -26,7 +23,6 @@ class ParentSignupScreen extends StatefulWidget {
 class _ParentSignupScreenState extends State<ParentSignupScreen> {
   final _userNameController = TextEditingController();
   final _groupNameController = TextEditingController();
-  String? _generatedCode;
 
   @override
   void initState() {
@@ -42,17 +38,12 @@ class _ParentSignupScreenState extends State<ParentSignupScreen> {
   }
 
   void _handleDecide() {
-    final random = Random();
-    final code = List.generate(4, (_) => random.nextInt(10)).join();
-    setState(() => _generatedCode = code);
-
     final draft = SignupDraft(
       role: AccountRole.parent,
       displayName: _userNameController.text.trim().isEmpty
           ? '保護者'
           : _userNameController.text.trim(),
       groupName: _groupNameController.text.trim(),
-      groupCode: code,
     );
 
     Navigator.of(context).push(
@@ -102,10 +93,10 @@ class _ParentSignupScreenState extends State<ParentSignupScreen> {
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
-                  GroupCodeBoxes(code: _generatedCode),
+                  const GroupCodeBoxes(),
                   const SizedBox(height: 8),
                   const Text(
-                    '決定後に発行されます。アカウント情報から確認できます。',
+                    'アカウント作成後に発行されます。アカウント情報から確認できます。',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
                   ),

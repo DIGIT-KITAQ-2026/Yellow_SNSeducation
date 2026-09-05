@@ -1,11 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:yellow_sns_education/main.dart';
+import 'package:yellow_sns_education/screens/child_signup_screen.dart';
+import 'package:yellow_sns_education/screens/login_screen.dart';
+import 'package:yellow_sns_education/screens/parent_signup_screen.dart';
+
+/// Mirrors MyApp's routes minus the AuthGate at '/', which needs a live
+/// Supabase client. These tests only cover the login screen's local
+/// validation and its navigation into the signup flow.
+Widget buildApp() {
+  return MaterialApp(
+    initialRoute: '/',
+    routes: {
+      '/': (_) => const LoginScreen(),
+      '/signup/parent': (_) => const ParentSignupScreen(),
+      '/signup/child': (_) => const ChildSignupScreen(),
+    },
+  );
+}
 
 void main() {
   testWidgets('Login screen shows email/password fields and buttons', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(buildApp());
 
     expect(find.text('アカウントログイン'), findsOneWidget);
     expect(find.text('メールアドレス'), findsOneWidget);
@@ -15,7 +31,7 @@ void main() {
   });
 
   testWidgets('Login validates empty fields with an error message', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(buildApp());
 
     await tester.tap(find.text('ログイン'));
     await tester.pump();
@@ -24,7 +40,7 @@ void main() {
   });
 
   testWidgets('Login rejects a malformed email address', (tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(buildApp());
 
     await tester.enterText(find.widgetWithText(TextField, 'メールアドレス'), 'not-an-email');
     await tester.enterText(find.widgetWithText(TextField, 'パスワード'), 'password123');
@@ -37,7 +53,7 @@ void main() {
   testWidgets('新規 opens the account type dialog, and a role leads to its signup screen', (
     tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(buildApp());
 
     await tester.tap(find.text('新規'));
     await tester.pumpAndSettle();

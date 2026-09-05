@@ -15,3 +15,11 @@ String? validateEmail(String value) {
   if (!isValidEmail(trimmed)) return 'メールアドレスの形式が正しくありません';
   return null;
 }
+
+/// Mirrors the 6-character minimum Supabase enforces (supabase/config.toml),
+/// so a too-short password is caught before the signUp round trip.
+String? validatePassword(String value) {
+  if (value.isEmpty) return '入力されていません';
+  if (value.length < 6) return 'パスワードは6文字以上で入力してください';
+  return null;
+}
