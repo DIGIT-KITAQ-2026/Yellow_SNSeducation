@@ -1,30 +1,27 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:yellow_sns_education/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('起動するとスクリーンタイムとAI講評が表示される', (WidgetTester tester) async {
+    await tester.pumpWidget(const YellowApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('昨日のドバガキ指数'), findsOneWidget);
+    expect(find.text('先日のスクリーンタイム'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    await tester.scrollUntilVisible(find.text('AIによる講評'), 300);
+    expect(find.text('AIによる講評'), findsOneWidget);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('AI講評ボタンで講評が表示される', (WidgetTester tester) async {
+    await tester.pumpWidget(const YellowApp());
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('講評を見る'), 300);
+    await tester.tap(find.text('講評を見る'));
+    await tester.pumpAndSettle(const Duration(seconds: 1));
+
+    expect(find.text('講評を見る'), findsNothing);
   });
 }
