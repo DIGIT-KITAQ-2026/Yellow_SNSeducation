@@ -1,0 +1,1 @@
+enum AccountType { parent, child }
