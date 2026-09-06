@@ -455,6 +455,8 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 アプリ:   ホーム画面で ai_reviews の最新行と screen_time_* のグラフを表示
 ```
 
+> **現状**: ホーム画面のカード自体は実装済み([lib/screens/home_body.dart](../lib/screens/home_body.dart))だが、上記の同期・AI生成部分は未実装で、`MockScreenTimeService`/`MockAiCommentaryService` によるダミーデータで動作している。詳細は[未対応・今後の課題](#未対応今後の課題)と [docs/screen_time_cards_minutes.md](screen_time_cards_minutes.md) を参照。
+
 ---
 
 ## 運用
@@ -493,3 +495,4 @@ npx supabase db query --linked "select * from groups;"
 - **`purge_old_screen_time()` の自動実行が未設定**。`pg_cron` かアプリ側の同期処理に組み込む必要があります
 - **グループコードは4桁固定**(1万通り)。総当たりで他人のグループに参加できてしまうリスクがあるため、コードの再生成機能や有効期限を将来検討する余地があります
 - **`profiles` に子のプロフィール削除のフローがない**。子アカウントを抜けさせる操作は未定義です
+- **スクリーンタイム/AI講評は現状クライアント内のモックのみ**。`ScreenTimeService`/`AiCommentaryService`([lib/services/screen_time_service.dart](../lib/services/screen_time_service.dart)、[lib/services/ai_commentary_service.dart](../lib/services/ai_commentary_service.dart))はまだ `screen_time_daily`/`screen_time_apps`/`ai_reviews` を読み書きしていません。加えて `AiCommentary`(`summary` + `adviceList: List<String>`)と `ai_reviews`(`comment` 単一text + `model`)の間に構造差があり、実装時にどちらかを寄せる必要があります。詳細は [docs/screen_time_cards_minutes.md](screen_time_cards_minutes.md) を参照

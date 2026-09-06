@@ -46,7 +46,7 @@ DBスキーマ・RPCの詳細は [db_schema.md](db_schema.md) を参照。
 | ParentSignupScreen | [parent_signup_screen.dart](../lib/screens/parent_signup_screen.dart) | 親側: ユーザー名・グループ名を入力 |
 | ChildSignupScreen | [child_signup_screen.dart](../lib/screens/child_signup_screen.dart) | 子側: ユーザー名・グループコードを入力 |
 | CredentialsScreen | [credentials_screen.dart](../lib/screens/credentials_screen.dart) | 共通の最終ステップ: メール/パスワードを登録し、signUp + RPCを実行 |
-| HomeScreen | [home_screen.dart](../lib/screens/home_screen.dart) | ログイン後のプレースホルダー画面。ログアウトボタンを持つ |
+| MainShell | [main_shell.dart](../lib/screens/main_shell.dart) | ログイン後のメイン画面。ホーム/クエスト/ギフト/検索の4タブを持つ |
 | MissingConfigScreen | [missing_config_screen.dart](../lib/screens/missing_config_screen.dart) | `.env`未設定時に表示される設定案内画面 |
 
 ```mermaid
@@ -57,7 +57,7 @@ flowchart TD
     ParentSignup[ParentSignupScreen]
     ChildSignup[ChildSignupScreen]
     Credentials[CredentialsScreen]
-    Home[HomeScreen]
+    Home[MainShell]
     Orphan["孤児セッション画面\n(AuthGate内)"]
 
     Gate -- "セッション無し" --> Login
@@ -87,7 +87,7 @@ flowchart TD
    - 取得中 → ローディング表示
    - 取得失敗(通信エラー等) → 「通信に失敗しました」+ 再試行ボタン。**ここではsignOutしない**(一時的な通信断とプロフィール不在を混同しないため)
    - `null`(=プロフィール行が無い、孤児セッション) → 案内文 + 「ログイン画面に戻る」ボタン(押すと`signOut`)
-   - 取得成功 → `HomeScreen(profile: ...)`
+   - 取得成功 → `SessionBridge.hydrate()` でプロフィール・子ども一覧を反映してから `MainShell()`
 
 `AuthService.profileRevision`(`ValueNotifier<int>`)は、RPCでプロフィールを作成した直後に`AuthGate`へ再取得を促すためのシグナル。`ValueListenableBuilder`のkeyに使い、`FutureBuilder`をやり直させている。
 
@@ -101,7 +101,7 @@ flowchart TD
 
 1. メール形式(`validateEmail`)とパスワード非空をローカルでチェック
 2. `AuthService.signIn(email, password)` → `signInWithPassword` を呼ぶ
-3. 成功時は画面側で何もしない。`AuthGate`がセッション変化を検知して自動的に`HomeScreen`へ切り替える
+3. 成功時は画面側で何もしない。`AuthGate`がセッション変化を検知して自動的に`MainShell`へ切り替える
 4. 失敗時は `authErrorMessage` で日本語化したメッセージをフォーム下に表示
 
 テストログインボタン3つ(保護者/子供1/子供2)は、[supabase_config.dart](../lib/supabase_config.dart)に定義した固定メールアドレスと共通パスワードで同じ`signIn`処理を呼ぶ。**事前にその3アカウントが実際にSupabase上へ登録されている必要がある**(→[テストアカウント](#テストアカウント))。
@@ -122,7 +122,7 @@ flowchart TD
 2. `CredentialsScreen`でメール/パスワードを入力し「決定」
 3. `AuthService.signUp` → 成功後 `AuthService.createParentAccount(groupName, displayName)` を呼び、`create_parent_account` RPCが実際のグループコードを発行
 4. 発行されたコードをダイアログで表示(お子さまの登録に必要な旨を案内)
-5. ダイアログを閉じると`popUntil(isFirst)`で`AuthGate`まで戻り、`HomeScreen`が表示される
+5. ダイアログを閉じると`popUntil(isFirst)`で`AuthGate`まで戻り、`MainShell`が表示される
 
 ### 子の場合
 
