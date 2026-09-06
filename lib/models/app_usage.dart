@@ -6,7 +6,7 @@ class AppUsage {
   final Duration duration;
   final Color color;
 
-  /// SNS・動画・ゲームなど「ドバガキ指数」の対象になるアプリかどうか。
+  /// SNS・動画・ゲームなど「ドパガキ指数」の対象になるアプリかどうか。
   final bool isDistracting;
 
   const AppUsage({

@@ -3,6 +3,7 @@ import '../models/signup_draft.dart';
 import '../models/user_profile.dart';
 import 'app_session.dart';
 import 'child_registry.dart';
+import 'screen_time_registry.dart';
 
 /// Bridges the Supabase-backed [UserProfile] onto the UI lineage's global
 /// singletons ([AppSession], [ChildRegistry]), which every screen under
@@ -41,5 +42,6 @@ class SessionBridge {
   static void clear() {
     AppSession.instance.loginAsParent();
     ChildRegistry.instance.clear();
+    ScreenTimeRegistry.instance.clear();
   }
 }

@@ -12,4 +12,10 @@ class AppColors {
   static const textPrimary = Color(0xFFEAEDF2);
   static const textSecondary = Color(0xFF8A93A3);
   static const error = Color(0xFFFF6B6B);
+
+  // ドパガキ指数/スクリーンタイムカード用
+  static const surfaceAlt = Color(0xFF1F2337);
+  static const danger = Color(0xFFEF6461);
+  static const warning = Color(0xFFF5C451);
+  static const good = Color(0xFF4ADE80);
 }

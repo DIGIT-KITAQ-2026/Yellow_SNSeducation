@@ -1,9 +1,9 @@
 import '../models/dopagaki_index.dart';
 import '../models/screen_time_day.dart';
 
-/// スクリーンタイムの記録から「ドバガキ指数」を計算する。
+/// スクリーンタイムの記録から「ドパガキ指数」を計算する。
 ///
-/// 指数 = その日の総利用時間に対する「ドバガキ対象アプリ
+/// 指数 = その日の総利用時間に対する「ドパガキ対象アプリ
 /// (SNS・動画・ゲームなど)」の利用時間の割合(%)。
 class DopagakiCalculator {
   const DopagakiCalculator._();

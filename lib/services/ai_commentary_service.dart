@@ -8,7 +8,7 @@ import '../models/screen_time_day.dart';
 /// バックエンドのAI講評API(担当・使用モデルは未定)が用意でき次第、
 /// このインターフェースを実装したクラス(例: `BackendAiCommentaryService`)を
 /// 作成して [MockAiCommentaryService] と差し替えればよい。
-/// 呼び出し側([AppState.getOrGenerateCommentary])はこのインターフェースにしか
+/// 呼び出し側([ScreenTimeRegistry.getOrGenerateCommentary])はこのインターフェースにしか
 /// 依存していないため、差し替えによる影響範囲はこのファイルのみで収まる。
 abstract class AiCommentaryService {
   Future<AiCommentary> generateCommentary({
@@ -39,12 +39,12 @@ class MockAiCommentaryService implements AiCommentaryService {
       case '危険':
         summary =
             '${child.name}さんは昨日、利用時間の${dopagakiIndex.percentage}%を$topAppTextなどに使っており、'
-            'ドバガキ指数は「危険」水準です。まとまった時間、他の活動に切り替えられていない可能性があります。';
+            'ドパガキ指数は「危険」水準です。まとまった時間、他の活動に切り替えられていない可能性があります。';
         break;
       case '注意':
         summary =
             '${child.name}さんは昨日、$topAppTextの利用がやや多く、'
-            'ドバガキ指数は「注意」水準(${dopagakiIndex.percentage}%)でした。習慣化する前に一声かけると良さそうです。';
+            'ドパガキ指数は「注意」水準(${dopagakiIndex.percentage}%)でした。習慣化する前に一声かけると良さそうです。';
         break;
       case '記録なし':
         summary = '${child.name}さんの昨日のスクリーンタイム記録がありません。端末の連携状況を確認してください。';
@@ -52,7 +52,7 @@ class MockAiCommentaryService implements AiCommentaryService {
       default:
         summary =
             '${child.name}さんは昨日、勉強・連絡系アプリの利用バランスが取れており、'
-            'ドバガキ指数は「良好」水準(${dopagakiIndex.percentage}%)でした。この調子を維持できるとよいですね。';
+            'ドパガキ指数は「良好」水準(${dopagakiIndex.percentage}%)でした。この調子を維持できるとよいですね。';
     }
 
     final advice = <String>[];

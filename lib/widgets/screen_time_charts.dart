@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/screen_time_day.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 
 String _formatDuration(Duration d) {
   final h = d.inHours;
@@ -22,7 +22,7 @@ class WeeklyScreenTimeChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (days.isEmpty) {
-      return const Text('記録がありません', style: TextStyle(color: AppColors.textSecondary));
+      return Text('記録がありません', style: TextStyle(color: Colors.white.withValues(alpha: 0.6)));
     }
 
     final chronological = days.reversed.toList();
@@ -46,7 +46,7 @@ class WeeklyScreenTimeChart extends StatelessWidget {
                 children: [
                   Text(
                     _formatDuration(day.total),
-                    style: const TextStyle(fontSize: 9, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.6)),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -55,14 +55,14 @@ class WeeklyScreenTimeChart extends StatelessWidget {
                   Container(
                     height: barHeight,
                     decoration: BoxDecoration(
-                      color: AppColors.accent,
+                      color: const Color(0xFF33F7FF),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     _weekdayLabels[day.date.weekday - 1],
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.6)),
                   ),
                 ],
               ),
@@ -84,7 +84,7 @@ class AppBreakdownList extends StatelessWidget {
   Widget build(BuildContext context) {
     final apps = day.usagesByDuration;
     if (apps.isEmpty) {
-      return const Text('記録がありません', style: TextStyle(color: AppColors.textSecondary));
+      return Text('記録がありません', style: TextStyle(color: Colors.white.withValues(alpha: 0.6)));
     }
     final maxMinutes = apps.first.duration.inMinutes;
 
@@ -99,7 +99,7 @@ class AppBreakdownList extends StatelessWidget {
                 width: 84,
                 child: Text(
                   app.appName,
-                  style: const TextStyle(fontSize: 12),
+                  style: const TextStyle(fontSize: 12, color: Colors.white),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -128,7 +128,7 @@ class AppBreakdownList extends StatelessWidget {
                 width: 56,
                 child: Text(
                   _formatDuration(app.duration),
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.6)),
                   textAlign: TextAlign.right,
                 ),
               ),
