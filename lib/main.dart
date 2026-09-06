@@ -1,44 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'app_state.dart';
-import 'screens/parent_home_screen.dart';
-import 'theme/app_theme.dart';
+import 'screens/auth_gate.dart';
+import 'screens/child_signup_screen.dart';
+import 'screens/missing_config_screen.dart';
+import 'screens/parent_signup_screen.dart';
+import 'supabase_config.dart';
+import 'theme/app_colors.dart';
 
-void main() {
-  runApp(const YellowApp());
-}
-
-class YellowApp extends StatefulWidget {
-  const YellowApp({super.key});
-
-  @override
-  State<YellowApp> createState() => _YellowAppState();
-}
-
-class _YellowAppState extends State<YellowApp> {
-  final AppState _appState = AppState();
-
-  @override
-  void dispose() {
-    _appState.dispose();
-    super.dispose();
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load();
+  } catch (_) {
+    // No .env file yet: MissingConfigScreen below explains what to do.
   }
+  if (SupabaseConfig.isConfigured) {
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      publishableKey: SupabaseConfig.anonKey,
+    );
+  }
+  runApp(const YellowSnsEducationApp());
+}
+
+class YellowSnsEducationApp extends StatelessWidget {
+  const YellowSnsEducationApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return AppScope(
-      notifier: _appState,
-      child: MaterialApp(
-        title: 'Yellow SNS Education',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark,
-        darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.dark,
-        home: Scaffold(
-          appBar: AppBar(title: const Text('スクリーンタイム / AIによる講評')),
-          body: const ParentHomeScreen(),
+    return MaterialApp(
+      title: 'Yellow SNS Education',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: AppColors.background,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.accent,
+          brightness: Brightness.dark,
         ),
       ),
+      initialRoute: '/',
+      routes: {
+        '/': (_) =>
+            SupabaseConfig.isConfigured ? const AuthGate() : const MissingConfigScreen(),
+        '/signup/parent': (_) => const ParentSignupScreen(),
+        '/signup/child': (_) => const ChildSignupScreen(),
+      },
     );
   }
 }

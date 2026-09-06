@@ -1,7 +1,15 @@
-/// 子どもアカウントのプロフィール(表示用の最小限の情報)。
-class ChildProfile {
-  final String id;
-  final String name;
+import 'dart:typed_data';
 
-  const ChildProfile({required this.id, required this.name});
+import 'gift_item.dart';
+import 'quest_item.dart';
+
+class ChildProfile {
+  ChildProfile({required this.name, required this.groupCode});
+
+  String name;
+  final String groupCode;
+  final List<QuestItem> questItems = [];
+  final List<GiftItem> giftItems = [];
+  int points = 0;
+  Uint8List? avatarBytes;
 }

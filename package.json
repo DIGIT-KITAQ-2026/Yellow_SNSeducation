@@ -1,0 +1,28 @@
+{
+  "name": "yellow_snseducation",
+  "version": "1.0.0",
+  "description": "黄色チームのリポジトリです",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DIGIT-KITAQ-2026/Yellow_SNSeducation.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DIGIT-KITAQ-2026/Yellow_SNSeducation/issues"
+  },
+  "homepage": "https://github.com/DIGIT-KITAQ-2026/Yellow_SNSeducation#readme",
+  "devDependencies": {
+    "supabase": "^2.116.0"
+  }
+}
