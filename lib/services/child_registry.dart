@@ -20,8 +20,8 @@ class ChildRegistry extends ChangeNotifier {
   ChildProfile? selectedInGroup(String? groupCode) =>
       (_selected != null && _selected!.groupCode == groupCode) ? _selected : null;
 
-  ChildProfile addChild(String name, {required String groupCode}) {
-    final profile = ChildProfile(name: name, groupCode: groupCode);
+  ChildProfile addChild(String name, {required String groupCode, String? id}) {
+    final profile = ChildProfile(name: name, groupCode: groupCode, id: id);
     _children.add(profile);
     _selected ??= profile;
     notifyListeners();
@@ -35,20 +35,20 @@ class ChildRegistry extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Replaces every cached child of [groupCode] with [children], e.g. after
-  /// fetching the group roster from Supabase. Keeps the current selection if
-  /// a child with the same name is still present, otherwise selects the
-  /// first of the new list (if any).
+  /// Replaces every cached child of [groupCode] with [children] (each with its
+  /// `profiles.id`), e.g. after fetching the group roster from Supabase. Keeps
+  /// the current selection if a child with the same name is still present,
+  /// otherwise selects the first of the new list (if any).
   void replaceGroupChildren(
     String groupCode,
-    List<({String name, int points})> children,
+    List<({String id, String name, int points})> children,
   ) {
     final previousSelectedName = _selected?.groupCode == groupCode ? _selected?.name : null;
     _children.removeWhere((child) => child.groupCode == groupCode);
 
     ChildProfile? restoredSelection;
     for (final child in children) {
-      final profile = ChildProfile(name: child.name, groupCode: groupCode)
+      final profile = ChildProfile(name: child.name, groupCode: groupCode, id: child.id)
         ..points = child.points;
       _children.add(profile);
       if (child.name == previousSelectedName) restoredSelection = profile;

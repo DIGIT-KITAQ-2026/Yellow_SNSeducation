@@ -5,7 +5,6 @@ import '../models/child_profile.dart';
 import '../models/dopagaki_index.dart';
 import '../models/screen_time_day.dart';
 import 'ai_commentary_service.dart';
-import 'dopagaki_calculator.dart';
 import 'screen_time_service.dart';
 
 /// スクリーンタイムとAI講評の取得状況・キャッシュを保持するシングルトン。
@@ -27,9 +26,9 @@ class ScreenTimeRegistry extends ChangeNotifier {
   final Set<String> _loadingScreenTime = {};
   final Set<String> _loadingCommentary = {};
 
-  /// [ChildProfile] はグループ内で一意な `name` しか持たないため、
-  /// グループコードと組み合わせてキャッシュキーにする。
-  String _keyFor(ChildProfile child) => '${child.groupCode}/${child.name}';
+  /// Supabase連携済みなら `profiles.id`(グループを跨いでも一意)をキーにする。
+  /// ローカル専用のダミー作成(id無し)の場合のみ、グループコード+名前で代用する。
+  String _keyFor(ChildProfile child) => child.id ?? '${child.groupCode}/${child.name}';
 
   List<ScreenTimeDay>? screenTimeFor(ChildProfile child) => _screenTimeCache[_keyFor(child)];
 
@@ -64,11 +63,15 @@ class ScreenTimeRegistry extends ChangeNotifier {
     await ensureScreenTimeLoaded(child);
   }
 
-  /// 指定した子どもの「昨日」のドパガキ指数。データ未取得なら記録なし扱い。
+  /// 指定した子どもの「昨日」のドパガキ指数。AI講評とセットで算出されるため、
+  /// 講評未生成の間は「未算出」、スクリーンタイム自体が無ければ「記録なし」を返す。
   DopagakiIndex dopagakiIndexFor(ChildProfile child) {
+    final commentary = _commentaryCache[_keyFor(child)];
+    if (commentary != null) return commentary.dopagakiIndex;
+
     final days = _screenTimeCache[_keyFor(child)];
     if (days == null || days.isEmpty) return DopagakiIndex.empty;
-    return DopagakiCalculator.calculate(days.first);
+    return DopagakiIndex.notGenerated;
   }
 
   /// AI講評を取得済みならキャッシュを返し、無ければ生成してキャッシュする。
@@ -86,11 +89,9 @@ class ScreenTimeRegistry extends ChangeNotifier {
       if (days == null || days.isEmpty) return null;
 
       final latest = days.first;
-      final index = DopagakiCalculator.calculate(latest);
       final commentary = await aiCommentaryService.generateCommentary(
         child: child,
         screenTime: latest,
-        dopagakiIndex: index,
       );
       _commentaryCache[key] = commentary;
       return commentary;

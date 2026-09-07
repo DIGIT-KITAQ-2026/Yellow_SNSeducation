@@ -26,12 +26,12 @@ DBスキーマ・RPCの詳細は [db_schema.md](db_schema.md) を参照。
 |---|---|---|
 | 1 | 状態管理は `ChildRegistry`/`AppSession` と同じ「ChangeNotifierシングルトン + `addListener`/`setState`」に統一する | アプリ全体がこの流儀で統一されており、`InheritedWidget`系を混在させると購読方法が画面ごとにバラつく |
 | 2 | データ取得は `ScreenTimeService`/`AiCommentaryService` インターフェース越しに行い、呼び出し側はモック/実装の区別を意識しない | 実機のOS API・バックエンドAPIへの差し替えが、実装クラスの追加だけで完結するようにするため |
-| 3 | ドパガキ指数の算出ロジックは `DopagakiCalculator` に集約する | 「昨日のドパガキ指数」カードと「AI講評」の両方が同じ計算結果を参照する必要があるため |
+| 3 | ドパガキ指数はAI講評とセットで算出する(`AiCommentary.dopagakiIndex`) | 単純な比率計算ではなく、AIがスクリーンタイムの内訳(絶対的な利用時間・一極集中度など)から総合的に採点するため |
 | 4 | 子ども一覧・選択そのものは持たず、既存の `ChildRegistry`/`AppSession` に委譲する | 二重管理を避け、`AccountBar` の子供切り替えと表示内容を自動的に同期させる |
 
 ### 用語
 
-- **ドパガキ指数** … その日の総利用時間に対する「ドパガキ対象アプリ(SNS・動画・ゲームなど)」の割合(0〜100)。高いほど依存が深刻。DB上は `ai_reviews.dopagaki_score`([db_schema.md](db_schema.md#ai_reviews--ai講評--ドパガキ指数))に対応する概念。
+- **ドパガキ指数** … SNS・動画・ゲームなど「ドパガキ対象アプリ」への依存・没入の深刻さをAIが0〜100で採点した指標。高いほど依存が深刻。DB上は `ai_reviews.dopagaki_score`([db_schema.md](db_schema.md#ai_reviews--ai講評--ドパガキ指数))に対応する概念。
 - **AI講評** … その日のスクリーンタイムをもとにした、要約(`summary`)とアドバイス(`adviceList`)のセット。
 
 ---
@@ -128,7 +128,7 @@ Column(
 | `commentaryFor(child)` / `isCommentaryLoading(child)` | キャッシュ済みのAI講評と読み込み中フラグ |
 | `ensureScreenTimeLoaded(child)` | 未取得なら `screenTimeService.fetchRecentScreenTime` を呼び、結果をキャッシュ |
 | `refreshScreenTime(child)` | キャッシュ(スクリーンタイム・AI講評とも)を破棄して再取得 |
-| `dopagakiIndexFor(child)` | キャッシュ済みの最新日(=昨日)を `DopagakiCalculator` に渡した結果。未取得時は `DopagakiIndex.empty` |
+| `dopagakiIndexFor(child)` | キャッシュ済みのAI講評があればその `dopagakiIndex`。無ければスクリーンタイム未取得時は `DopagakiIndex.empty`、取得済みだが講評未生成なら `DopagakiIndex.notGenerated`(「未算出」) |
 | `getOrGenerateCommentary(child)` | キャッシュがあれば返す。無ければスクリーンタイムの取得を待って `aiCommentaryService.generateCommentary` を呼び、結果をキャッシュ |
 | `clear()` | 全キャッシュを破棄。サインアウト時に呼ばれる |
 
@@ -138,18 +138,21 @@ Column(
 
 ## ドパガキ指数の算出
 
-[dopagaki_calculator.dart](../lib/services/dopagaki_calculator.dart) が `ScreenTimeDay` → `DopagakiIndex` の変換を担う。
+ドパガキ指数はAI講評([AiCommentaryService.generateCommentary](../lib/services/ai_commentary_service.dart))が講評本文とセットで算出する。単純な「ドパガキ対象アプリの時間 ÷ 総利用時間」の比率ではなく、`supabase/functions/ai-review/index.ts` のプロンプトで次の3点を総合するようGeminiに指示している:
 
-```
-percentage = round(distractingTotal(分) / total(分) × 100)
-```
+- (a) ドパガキ対象アプリの**絶対的な利用時間の長さ**(長時間ほど高スコア)
+- (b) 特定の1アプリへの**一極集中の度合い**(偏っているほど高スコア)
+- (c) 総利用時間に占めるドパガキ対象アプリの割合
 
-- `total` が0(記録なし)の場合は `DopagakiIndex.empty`(`percentage: 0, label: '記録なし'`)
+総利用時間そのものが短い日は、割合が高くてもスコアを抑えめにするよう指示している。ラベル付け(`良好`/`注意`/`危険`)は [dopagaki_calculator.dart](../lib/services/dopagaki_calculator.dart) の `DopagakiCalculator.labelFor(percentage)` に集約:
+
 - `percentage < 30` → `良好`
 - `30 <= percentage < 60` → `注意`
 - `percentage >= 60` → `危険`
 
-`ScreenTimeDay.distractingTotal` は `AppUsage.isDistracting == true` のアプリ(SNS・動画・ゲームなど)の合計利用時間。
+`DopagakiCalculator.calculate(ScreenTimeDay)`(比率ベースの計算)は `MockAiCommentaryService` のフォールバック用に残っている。
+
+`ScreenTimeRegistry.dopagakiIndexFor` は、講評未生成の間は `DopagakiIndex.notGenerated`(「未算出」)を返す。「昨日のドパガキ指数」カード([dopagaki_index_card.dart](../lib/widgets/dopagaki_index_card.dart))はこのとき数値の代わりに「—」を表示する。
 
 ---
 
@@ -208,14 +211,26 @@ abstract class AiCommentaryService {
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
-    required DopagakiIndex dopagakiIndex,
   });
 }
 ```
 
-`MockAiCommentaryService` はドパガキ指数のラベル(`危険`/`注意`/`記録なし`/それ以外)で分岐するルールベースの文章生成。実際のAI API呼び出しは行っていない。800msのダミー遅延あり。
+ドパガキ指数もこのサービスが算出する(`AiCommentary.dopagakiIndex`)ため、`dopagakiIndex` は引数に無い。
 
-バックエンドのAI講評API(担当・使用モデルは未定)が用意でき次第、この抽象クラスを実装した別クラス(例: `BackendAiCommentaryService`)に差し替える。呼び出し側(`ScreenTimeRegistry.getOrGenerateCommentary`)はインターフェースにしか依存していないため、差し替えの影響範囲はこのファイルのみで収まる。
+**`MockAiCommentaryService`** — 内部で `DopagakiCalculator.calculate(screenTime)` を呼んで指数を計算し、そのラベル(`危険`/`注意`/`記録なし`/それ以外)で分岐するルールベースの文章を生成する。実際のAI API呼び出しは行わない。800msのダミー遅延あり。開発時の既定実装、および下記フォールバック先として使われる。
+
+**`SupabaseAiCommentaryService`**([supabase_ai_commentary_service.dart](../lib/services/supabase_ai_commentary_service.dart)) — 実際にGeminiで生成する本番実装。`main.dart` で `SupabaseConfig.isConfigured` の場合にのみ `ScreenTimeRegistry.instance.aiCommentaryService` に設定される。
+
+- Supabase Edge Function `ai-review`([supabase/functions/ai-review/index.ts](../supabase/functions/ai-review/index.ts))を `Supabase.instance.client.functions.invoke('ai-review', body: {...})` で呼ぶ。ボディは `child_id`・`date`(YYYY-MM-DD)・`screen_time`(`total_minutes` とアプリ別内訳 `apps: [{name, minutes, is_distracting}]`)
+- Edge Function 側の処理:
+  1. 呼び出し元のJWTで対象の子が同じグループのメンバーか検証(profiles_select_group RLSを利用)。親・子どちらから呼んでも同じ検証で通るため、**同じ子の同じ日付なら親子で同一の講評が返る**
+  2. `ai_reviews (child_id, date)` に既存行があれば、Geminiを呼ばずそれを返す(1日1回の生成に固定し、親子で必ず同じ結果になる)
+  3. なければ Gemini Interactions API(`POST https://generativelanguage.googleapis.com/v1beta/interactions`)を呼び、`dopagaki_score`(0-100)・`summary`・`advice: string[]` をJSONスキーマで強制取得
+  4. 取得結果を `ai_reviews` にservice roleで保存(`0008_ai_reviews_advice.sql` で追加した `advice` 列に配列を保存)
+- `child.id` が無い(Supabase未連携)・Edge Functionが `gemini_not_configured` を返す(APIキー未設定)・通信エラー・レスポンス形状が想定外、のいずれかの場合は内部で `MockAiCommentaryService` にフォールバックする
+- Geminiへのプロンプト方針: SNS利用の禁止・削減ではなく**適切な距離感での利用を促す**トーン。子どもを断罪しない。ドパガキ指数は単純な比率ではなく「絶対的な利用時間の長さ・一極集中度・総利用時間比」を総合するよう指示している
+
+呼び出し側(`ScreenTimeRegistry.getOrGenerateCommentary`)は `AiCommentaryService` インターフェースにしか依存していないため、実装の差し替えによる影響範囲は上記2ファイルに収まる。
 
 ---
 
@@ -241,8 +256,7 @@ abstract class AiCommentaryService {
 
 ## 既知の制約・今後の課題
 
-- **Supabase未接続**。`screen_time_daily`/`screen_time_apps`/`ai_reviews`([db_schema.md](db_schema.md#screen_time_daily--screen_time_apps--スクリーンタイム))を読み書きする実装(`SupabaseScreenTimeService` 等)はまだ無く、`Mock*Service` のダミーデータのみで動作している
-- **`AiCommentary` と `ai_reviews` の構造差**。アプリ側のモデルは `summary` + `adviceList: List<String>` + `generatedAt` だが、DBの `ai_reviews` は `comment`(単一text) + `dopagaki_score` + `model`。永続化する際はどちらかのモデルに寄せる必要がある(例: `adviceList` を改行結合して `comment` に格納する、または `ai_reviews` に列を追加する)
+- **スクリーンタイム自体はまだモック**。`screen_time_daily`/`screen_time_apps`([db_schema.md](db_schema.md#screen_time_daily--screen_time_apps--スクリーンタイム))を読み書きする実装(`SupabaseScreenTimeService` 等)はまだ無く、`MockScreenTimeService` のダミーデータのみで動作している。AI講評(`ai-review` Edge Function)自体は本物のGemini呼び出しだが、渡している元データはモック。実機のOS API連携時は `ScreenTimeService` を差し替えるだけでよい
 - **`AppUsage.color`/`isDistracting` に対応するDB列が無い**。`screen_time_apps` は `app_id`/`app_label` のみを持つため、実装時はアプリ別の色・「ドパガキ対象アプリか」の判定をクライアント側のカタログ(または別途マスタテーブル)でマッピングする方針を決める必要がある
-- **AI講評の生成主体が未定**。[db_schema.md](db_schema.md#重要な前提) の通り `ai_reviews` への書き込みは service role キー(サーバー/Edge Functions)の責務であり、クライアントから直接書き込むことはできない。AI講評の生成をどこで実行するか(Edge Function化など)は未着手
-- **子ども識別に `ChildProfile.id` が使えない**。`ScreenTimeRegistry` のキャッシュキーは `groupCode + name` の合成文字列で代用しているため、同一グループ内で同姓同名の子どもがいると衝突する。`ChildProfile` にDBの `profiles.id` を持たせる改修が望ましい
+- **Edge Functionはリクエストボディのスクリーンタイムをそのまま信頼する**。`ai-review` は呼び出し元が「同じグループのメンバーか」だけを検証しており、送られてきた `screen_time` の値自体が本物かは検証していない。将来的に `screen_time_daily`/`screen_time_apps` から直接読む実装に変えれば、この点は解消される
+- **`purge_old_screen_time()` の自動実行は未設定**([db_schema.md](db_schema.md#未対応今後の課題)と共通)。`ai_reviews` は保持期間の対象外なので、こちらは影響しない

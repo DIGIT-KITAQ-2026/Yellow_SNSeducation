@@ -43,12 +43,12 @@ class _FakeAiCommentaryService implements AiCommentaryService {
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
-    required DopagakiIndex dopagakiIndex,
   }) async {
     return AiCommentary(
       summary: 'テスト用の講評です。',
       adviceList: const ['テスト用のアドバイス'],
       generatedAt: DateTime(2026, 9, 7, 9, 0),
+      dopagakiIndex: const DopagakiIndex(percentage: 75, label: '危険'),
     );
   }
 }
@@ -96,5 +96,24 @@ void main() {
 
     expect(find.text('講評を見る'), findsNothing);
     expect(find.text('テスト用の講評です。'), findsOneWidget);
+  });
+
+  testWidgets('ドパガキ指数はAI講評生成前は未算出、生成後はAIの値になる', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 講評生成前: スクリーンタイムはあるがドパガキ指数は「未算出」表示。
+    expect(find.text('未算出'), findsOneWidget);
+    expect(find.text('危険'), findsNothing);
+
+    await tester.scrollUntilVisible(find.text('講評を見る'), 300);
+    await tester.tap(find.text('講評を見る'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    // 講評生成後: _FakeAiCommentaryService が返す「危険」に切り替わる。
+    expect(find.text('未算出'), findsNothing);
+    expect(find.text('危険'), findsOneWidget);
   });
 }

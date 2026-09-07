@@ -11,6 +11,10 @@ class DopagakiIndexCard extends StatelessWidget {
 
   const DopagakiIndexCard({super.key, required this.index, this.isLoading = false});
 
+  /// AI講評未生成・スクリーンタイム未取得の間は、`0%` と誤読されないよう
+  /// パーセント表記の代わりに「—」を表示する。
+  bool get _isUnscored => index.label == '未算出' || index.label == '記録なし';
+
   Color get _color {
     switch (index.label) {
       case '危険':
@@ -57,18 +61,23 @@ class DopagakiIndexCard extends StatelessWidget {
                 border: Border.all(color: _color, width: 2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    '${index.percentage}',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _color),
-                  ),
-                  Text(' %', style: TextStyle(fontSize: 13, color: _color)),
-                ],
-              ),
+              child: _isUnscored
+                  ? Text(
+                      '—',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _color),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          '${index.percentage}',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _color),
+                        ),
+                        Text(' %', style: TextStyle(fontSize: 13, color: _color)),
+                      ],
+                    ),
             ),
         ],
       ),

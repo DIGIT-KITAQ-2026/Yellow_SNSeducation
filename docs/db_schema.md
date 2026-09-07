@@ -4,7 +4,7 @@
 **マイグレーションのSQLが正**であり、このドキュメントはそれを読み解くための資料です。スキーマを変更したら、このドキュメントも合わせて更新してください。
 
 - 対象プロジェクト: `Dokagaki-edu-sns` (ap-northeast-1)
-- 適用済みマイグレーション: `0001` 〜 `0007`
+- 適用済みマイグレーション: `0001` 〜 `0008`
 
 ## 目次
 
@@ -319,13 +319,15 @@ select purge_old_screen_time();
 | `child_id` | uuid | not null → `profiles(id)` on delete cascade | |
 | `date` | date | not null | 対象日(通常は「きのう」) |
 | `dopagaki_score` | int | check `between 0 and 100` | **ドパガキ指数**。高いほど依存が深刻 |
-| `comment` | text | not null | 講評本文 |
+| `comment` | text | not null | 講評本文(要約) |
+| `advice` | jsonb | not null, default `'[]'` | アドバイス文字列の配列(`0008_ai_reviews_advice.sql` で追加) |
 | `model` | text | | 生成に使ったモデル名 |
 | `created_at` | timestamptz | not null, default `now()` | |
 
 - `unique (child_id, date)` … 1日1件。再生成する場合はUPSERT
 - **保持期間の対象外**。スクリーンタイムの生データが消えても、指数と講評は残り続ける
 - AIが0〜100の範囲外を返した場合は**アプリ側でクランプしてから保存**する(check制約で弾かれて保存に失敗するため)
+- 生成・保存は `supabase/functions/ai-review` (Edge Function) が Gemini API を呼んで行う。詳細は [screen_time_ai_commentary.md](screen_time_ai_commentary.md#aicommentaryservice) を参照
 
 ### `activity_suggestions` / `activity_requests` — 周辺アクティビティ(将来機能)
 
@@ -495,4 +497,4 @@ npx supabase db query --linked "select * from groups;"
 - **`purge_old_screen_time()` の自動実行が未設定**。`pg_cron` かアプリ側の同期処理に組み込む必要があります
 - **グループコードは4桁固定**(1万通り)。総当たりで他人のグループに参加できてしまうリスクがあるため、コードの再生成機能や有効期限を将来検討する余地があります
 - **`profiles` に子のプロフィール削除のフローがない**。子アカウントを抜けさせる操作は未定義です
-- **スクリーンタイム/AI講評は現状クライアント内のモックのみ**。`ScreenTimeService`/`AiCommentaryService`([lib/services/screen_time_service.dart](../lib/services/screen_time_service.dart)、[lib/services/ai_commentary_service.dart](../lib/services/ai_commentary_service.dart))はまだ `screen_time_daily`/`screen_time_apps`/`ai_reviews` を読み書きしていません。加えて `AiCommentary`(`summary` + `adviceList: List<String>`)と `ai_reviews`(`comment` 単一text + `model`)の間に構造差があり、実装時にどちらかを寄せる必要があります。詳細は [screen_time_ai_commentary.md](screen_time_ai_commentary.md) を参照
+- **スクリーンタイム自体は現状クライアント内のモックのみ**。`ScreenTimeService`([lib/services/screen_time_service.dart](../lib/services/screen_time_service.dart))はまだ `screen_time_daily`/`screen_time_apps` を読み書きしていません。一方 `AiCommentaryService` は `SupabaseAiCommentaryService` が `ai-review` Edge Function 経由で実際に `ai_reviews` を読み書きします(モックのスクリーンタイムをリクエストボディで渡す形)。詳細は [screen_time_ai_commentary.md](screen_time_ai_commentary.md) を参照

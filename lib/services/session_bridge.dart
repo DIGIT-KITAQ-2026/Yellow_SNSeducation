@@ -19,17 +19,19 @@ class SessionBridge {
     required List<({String id, String name, int points})> children,
     String? email,
   }) {
-    ChildRegistry.instance.replaceGroupChildren(
-      profile.groupCode,
-      [for (final child in children) (name: child.name, points: child.points)],
-    );
+    // children はそのまま ChildRegistry.replaceGroupChildren に渡す
+    // (id/name/points を保ったまま)。
+    ChildRegistry.instance.replaceGroupChildren(profile.groupCode, children);
 
     if (profile.role == AccountRole.parent) {
       AppSession.instance.loginAsParent();
       AppSession.instance.setParentName(profile.displayName);
     } else {
-      final childProfile = ChildProfile(name: profile.displayName, groupCode: profile.groupCode)
-        ..points = profile.pointBalance;
+      final childProfile = ChildProfile(
+        name: profile.displayName,
+        groupCode: profile.groupCode,
+        id: profile.id,
+      )..points = profile.pointBalance;
       AppSession.instance.loginAsChild(childProfile);
     }
 

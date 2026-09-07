@@ -1,33 +1,34 @@
 import '../models/ai_commentary.dart';
 import '../models/child_profile.dart';
-import '../models/dopagaki_index.dart';
 import '../models/screen_time_day.dart';
+import 'dopagaki_calculator.dart';
 
-/// 「AIによる講評」を生成するインターフェース。
+/// 「AIによる講評」(要約・アドバイス・ドパガキ指数)を生成するインターフェース。
 ///
-/// バックエンドのAI講評API(担当・使用モデルは未定)が用意でき次第、
-/// このインターフェースを実装したクラス(例: `BackendAiCommentaryService`)を
-/// 作成して [MockAiCommentaryService] と差し替えればよい。
+/// ドパガキ指数もこのサービスが算出する(単純な比率ではなく、AIがスクリーン
+/// タイムの内訳から総合的に採点する)。
 /// 呼び出し側([ScreenTimeRegistry.getOrGenerateCommentary])はこのインターフェースにしか
-/// 依存していないため、差し替えによる影響範囲はこのファイルのみで収まる。
+/// 依存していないため、実装の差し替えによる影響範囲はこのファイルのみで収まる。
 abstract class AiCommentaryService {
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
-    required DopagakiIndex dopagakiIndex,
   });
 }
 
-/// バックエンド未接続の間、開発・デモに使うルールベースのモック実装。
+/// AI API呼び出しが行えない場合(APIキー未設定・通信エラーなど)に使う、
+/// ルールベースのフォールバック実装。[SupabaseAiCommentaryService] が内部で
+/// フォールバック先として使うほか、開発・テスト時の既定実装としても使う。
 class MockAiCommentaryService implements AiCommentaryService {
   @override
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
-    required DopagakiIndex dopagakiIndex,
   }) async {
     // 実際のAI API呼び出しの遅延を模したダミーウェイト。
     await Future.delayed(const Duration(milliseconds: 800));
+
+    final dopagakiIndex = DopagakiCalculator.calculate(screenTime);
 
     final topApps = screenTime.usagesByDuration.take(2).toList();
     final topAppText = topApps.isEmpty
@@ -69,6 +70,7 @@ class MockAiCommentaryService implements AiCommentaryService {
       summary: summary,
       adviceList: advice,
       generatedAt: DateTime.now(),
+      dopagakiIndex: dopagakiIndex,
     );
   }
 }

@@ -49,6 +49,7 @@ node_modules/
 
 # Supabase local env
 supabase/.temp/
+supabase/functions/.env
 .env
 
 # Holds a Supabase personal access token
