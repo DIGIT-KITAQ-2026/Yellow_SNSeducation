@@ -22,8 +22,8 @@
 - **ポイントとプレゼントの交換**
   貯めたポイントを消費して、親アカウントがあらかじめ定めたプレゼントの中から好きなものを獲得できます。
 
-DB(Supabase)の仕様・テーブル定義・RLS・運用手順は [docs/db_schema.md](docs/db_schema.md)、ログイン機能の仕様は [docs/login.md](docs/login.md) を参照してください。
-スクリーンタイム/AI講評カードをホーム画面へ統合した際の方針・積み残し課題は [docs/screen_time_cards_minutes.md](docs/screen_time_cards_minutes.md) にまとめています。
+DB(Supabase)の仕様・テーブル定義・RLS・運用手順は [docs/db_schema.md](docs/db_schema.md)、ログイン機能の仕様は [docs/login.md](docs/login.md)、
+スクリーンタイム/ドパガキ指数/AI講評の仕様は [docs/screen_time_ai_commentary.md](docs/screen_time_ai_commentary.md) を参照してください。
 
 ### 余裕があれば実装したい機能
 
