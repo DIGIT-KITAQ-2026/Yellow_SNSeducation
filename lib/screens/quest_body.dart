@@ -9,6 +9,7 @@ import '../services/app_session.dart';
 import '../services/child_notification_registry.dart';
 import '../services/child_registry.dart';
 import '../services/exchange_request_registry.dart';
+import '../services/quest_service.dart';
 import '../widgets/confirm_delete_dialog.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
@@ -26,6 +27,7 @@ class QuestBody extends StatefulWidget {
 
 class _QuestBodyState extends State<QuestBody> {
   bool _isEditing = false;
+  bool _busy = false;
 
   ChildProfile? get _currentProfile => AppSession.instance.isChild
       ? AppSession.instance.childProfile
@@ -53,51 +55,100 @@ class _QuestBodyState extends State<QuestBody> {
 
   void _handleRegistryChange() => setState(() {});
 
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _openNewTaskDialog() async {
+    if (_busy) return;
     final profile = _currentProfile;
-    if (profile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('先に子供を登録してください')),
-      );
+    final groupId = AppSession.instance.groupId;
+    if (profile?.id == null || groupId == null) {
+      _showError('先に子供を登録してください');
       return;
     }
     final result = await showDialog<QuestItem>(
       context: context,
       builder: (_) => const NewTaskDialog(),
     );
-    if (result != null) {
-      setState(() => profile.questItems.add(result));
+    if (result == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final created = await QuestService.createTask(
+        groupId: groupId,
+        childId: profile!.id!,
+        title: result.title,
+        points: result.points,
+        detail: result.detail,
+      );
+      if (!mounted) return;
+      setState(() => profile.questItems.add(created));
+    } catch (_) {
+      _showError('保存に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _confirmDelete(QuestItem item) async {
+    if (_busy) return;
     final confirmed = await showConfirmDeleteDialog(context);
-    if (confirmed) {
+    if (!confirmed || item.id == null) return;
+
+    setState(() => _busy = true);
+    try {
+      await QuestService.deleteTask(item.id!);
+      if (!mounted) return;
       setState(() => _items.remove(item));
+    } catch (_) {
+      _showError('削除に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _openEditTaskDialog(QuestItem item) async {
+    if (_busy) return;
     final result = await showDialog<QuestItem>(
       context: context,
       builder: (_) => NewTaskDialog(initial: item),
     );
-    if (result != null) {
-      final index = _items.indexOf(item);
-      if (index != -1) {
-        setState(() => _items[index] = result);
-      }
+    if (result == null) return;
+    final index = _items.indexOf(item);
+    if (index == -1 || result.id == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final updated = await QuestService.updateTask(result);
+      if (!mounted) return;
+      setState(() => _items[index] = updated);
+    } catch (_) {
+      _showError('更新に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  void _requestAchievement(QuestItem item) {
+  Future<void> _requestAchievement(QuestItem item) async {
+    if (_busy) return;
     final profile = _currentProfile;
     if (profile == null) return;
-    AchievementRequestRegistry.instance.addRequest(profile, item);
-    ChildNotificationRegistry.instance.add(profile, '達成申請を行いました。');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('達成申請を送りました')),
-    );
+
+    setState(() => _busy = true);
+    try {
+      await AchievementRequestRegistry.instance.addRequest(profile, item);
+      if (!mounted) return;
+      ChildNotificationRegistry.instance.add(profile, '達成申請を行いました。');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('達成申請を送りました')),
+      );
+    } catch (_) {
+      _showError('送信に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override

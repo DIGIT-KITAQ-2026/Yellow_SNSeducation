@@ -13,6 +13,8 @@ class AppSession extends ChangeNotifier {
   UserRole role = UserRole.parent;
   ChildProfile? childProfile;
   String? groupCode;
+  /// `groups.id`(SupabaseのUUID)。`tasks.group_id` 等のinsertに必要。
+  String? groupId;
   String? groupName;
   String? parentName;
   Uint8List? parentAvatar;
@@ -24,6 +26,7 @@ class AppSession extends ChangeNotifier {
     role = UserRole.parent;
     childProfile = null;
     groupCode = null;
+    groupId = null;
     groupName = null;
     parentName = null;
     parentAvatar = null;
@@ -39,6 +42,11 @@ class AppSession extends ChangeNotifier {
 
   void setGroupCode(String code) {
     groupCode = code;
+    notifyListeners();
+  }
+
+  void setGroupId(String id) {
+    groupId = id;
     notifyListeners();
   }
 

@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/quest_item.dart';
 import '../models/user_profile.dart';
+import 'quest_service.dart';
 
 /// Thin wrapper over the Supabase client for everything auth-related.
 /// Holds no state of its own beyond [profileRevision].
@@ -74,22 +76,26 @@ class AuthService {
 
   /// The child rows of [groupId], for the parent's 子ども切替え and the
   /// quest/gift screens. RLS (profiles_select_group) lets any group member
-  /// read every profile in their own group.
-  static Future<List<({String id, String name, int points})>> fetchGroupChildren(
-    String groupId,
-  ) async {
+  /// read every profile in their own group. Also fetches each child's open
+  /// quests, so `QuestBody` shows the same list on every device/restart.
+  static Future<List<({String id, String name, int points, List<QuestItem> quests})>>
+      fetchGroupChildren(String groupId) async {
     final rows = await _client
         .from('profiles')
         .select('id, display_name, point_balance')
         .eq('group_id', groupId)
         .eq('role', 'child');
 
+    final childIds = [for (final row in rows as List) row['id'] as String];
+    final quests = await Future.wait(childIds.map(QuestService.fetchTasks));
+
     return [
-      for (final row in rows as List)
+      for (var i = 0; i < rows.length; i++)
         (
-          id: row['id'] as String,
-          name: row['display_name'] as String,
-          points: row['point_balance'] as int,
+          id: childIds[i],
+          name: rows[i]['display_name'] as String,
+          points: rows[i]['point_balance'] as int,
+          quests: quests[i],
         ),
     ];
   }

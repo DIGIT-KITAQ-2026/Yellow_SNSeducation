@@ -187,7 +187,7 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 
 ### `tasks` — やることリスト
 
-親が**対象の子を1人指定して**作成する。1回きりで、承認されたら `completed` になり再利用しない。
+親が**対象の子を1人指定して**作成する。1回きりで、承認されたら行ごと削除され再利用しない(`status = 'completed'` / `completed_at` は列としては残すが、`approve_task_request` が削除するため実際には使われない)。
 
 | 列 | 型 | 制約 | 説明 |
 |---|---|---|---|
@@ -223,6 +223,7 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 
 - **部分unique index `(task_id) where status = 'pending'`** … 1つのタスクに対して同時に複数の申請が並ばないようにする(1タスク1子なので task_id だけで足りる)
 - 却下された後は再申請できる(`rejected` は部分indexの対象外のため)
+- 承認されると `tasks` の削除に cascade されてこの行も消える。**同じ `task_id` に過去の却下済み申請があれば、それも一緒に削除される**(`status = 'approved'` / `decided_by` / `decided_at` は列としては残すが、承認された行は削除されるため実際には残らない)
 
 ### `rewards` — プレゼント(グループ共有)
 
@@ -352,7 +353,7 @@ READMEの「余裕があれば実装したい機能」向け。テーブルとRP
 |---|---|---|---|
 | `create_parent_account` | [0002](../supabase/migrations/0002_profiles.sql) | `group_name`, `parent_display_name` | グループ作成 + 親プロフィール作成。`(group_id, group_code)` を返す |
 | `join_group` | [0002](../supabase/migrations/0002_profiles.sql) | `code`, `child_display_name` | コードでグループを探し、子プロフィールを作成。`group_id` を返す |
-| `approve_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `request_id` | 申請を `approved` → タスクを `completed` → 台帳に加算行 → 残高加算 |
+| `approve_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0010](../supabase/migrations/0010_delete_task_on_approve.sql)で更新 | `request_id` | 台帳に加算行 → 残高加算 → `tasks` を物理削除(cascadeで `task_requests` も削除、`point_entries.task_request_id` は null に) |
 | `reject_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `request_id` | 申請を `rejected` に(タスクは `open` のまま = 再申請可能) |
 | `redeem_reward` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `reward_id` | 残高チェック → 交換履歴 → 台帳に減算行 → 残高減算 |
 | `recompute_point_balance` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `target_child_id` | 台帳から残高を再計算して返す(照合用、更新はしない) |
@@ -369,7 +370,7 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 - 既にプロフィールがある状態で `create_parent_account` / `join_group` → `This account already has a profile`
 - 存在しないコードで `join_group` → `No group found for code XXXX`
 - `pending` でない申請を承認/却下 → `Task request ... is not pending`
-- 既に `completed` のタスクの申請を承認 → `Task ... is already completed`
+- 存在しない(既に承認されて削除済みの) `request_id` で承認/却下 → `Task request ... not found`
 - 残高不足で `redeem_reward` → `Insufficient points: have X, need Y`
 - `points <= 0` で `approve_activity_request` → `points must be positive`
 
@@ -430,10 +431,10 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 親: insert into tasks (group_id, child_id, title, points, created_by) values (..., 'たろう', '宿題', 4, ...)
 子: insert into task_requests (task_id, child_id) values (..., 'たろう')   -- 達成申請
 親: select approve_task_request('<request_id>')
-    → task_requests.status = 'approved'
-    → tasks.status = 'completed', completed_at = now()
     → point_entries に +4 の行(description='宿題')
     → profiles.point_balance += 4
+    → tasks を削除(cascadeで task_requests も削除。同じタスクに対する
+      過去の却下済み申請があればそれも一緒に消える)
 ```
 
 ### プレゼント交換

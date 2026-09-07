@@ -19,11 +19,12 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
   late final _titleController =
       TextEditingController(text: widget.initial?.title ?? '');
   late final _pointsController =
-      TextEditingController(text: widget.initial?.points ?? '');
+      TextEditingController(text: widget.initial?.points.toString() ?? '');
   late final _detailController =
       TextEditingController(text: widget.initial?.detail ?? '');
   late bool _showDetail = widget.initial?.detail.isNotEmpty ?? false;
   bool _pointsError = false;
+  String _pointsErrorText = '入力されていません';
 
   @override
   void dispose() {
@@ -35,14 +36,27 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
 
   void _handleComplete() {
     final title = _titleController.text.trim();
-    final points = _pointsController.text.trim();
-    if (points.isEmpty) {
-      setState(() => _pointsError = true);
+    final pointsText = _pointsController.text.trim();
+    if (pointsText.isEmpty) {
+      setState(() {
+        _pointsError = true;
+        _pointsErrorText = '入力されていません';
+      });
+      return;
+    }
+    final points = int.tryParse(pointsText);
+    // DBの制約(tasks.points > 0)に合わせて、0以下は弾く。
+    if (points == null || points <= 0) {
+      setState(() {
+        _pointsError = true;
+        _pointsErrorText = '1以上を入力してください';
+      });
       return;
     }
     if (title.isEmpty) return;
     Navigator.of(context).pop(
       QuestItem(
+        id: widget.initial?.id,
         title: title,
         points: points,
         detail: _showDetail ? _detailController.text.trim() : '',
@@ -128,9 +142,9 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
             ),
             if (_pointsError) ...[
               const SizedBox(height: 4),
-              const Text(
-                '入力されていません',
-                style: TextStyle(color: Colors.redAccent, fontSize: 12),
+              Text(
+                _pointsErrorText,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
               ),
             ],
             const SizedBox(height: 16),

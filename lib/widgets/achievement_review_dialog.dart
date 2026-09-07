@@ -14,10 +14,21 @@ class AchievementReviewDialog extends StatefulWidget {
 
 class _AchievementReviewDialogState extends State<AchievementReviewDialog> {
   bool _tapped = false;
+  bool _submitting = false;
 
-  void _confirm() {
-    AchievementRequestRegistry.instance.stamp(widget.request);
-    Navigator.of(context).pop();
+  Future<void> _confirm() async {
+    setState(() => _submitting = true);
+    try {
+      await AchievementRequestRegistry.instance.stamp(widget.request);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('通信に失敗しました。もう一度お試しください')),
+      );
+    }
   }
 
   @override
@@ -89,7 +100,7 @@ class _AchievementReviewDialogState extends State<AchievementReviewDialog> {
             if (!request.stamped && _tapped) ...[
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _confirm,
+                onPressed: _submitting ? null : _confirm,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
