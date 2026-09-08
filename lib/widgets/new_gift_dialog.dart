@@ -22,8 +22,9 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
   late final _titleController =
       TextEditingController(text: widget.initial?.title ?? '');
   late final _pointsController =
-      TextEditingController(text: widget.initial?.points ?? '');
+      TextEditingController(text: widget.initial == null ? '' : '${widget.initial!.points}');
   late Uint8List? _imageBytes = widget.initial?.imageBytes;
+  late bool _alwaysVisible = widget.initial?.alwaysVisible ?? false;
   bool _titleError = false;
   bool _pointsError = false;
 
@@ -43,14 +44,22 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
 
   void _handleSave() {
     final title = _titleController.text.trim();
-    final points = _pointsController.text.trim();
+    final points = int.tryParse(_pointsController.text.trim()) ?? 0;
     setState(() {
       _titleError = title.isEmpty;
-      _pointsError = points.isEmpty;
+      // rewards.cost_points > 0 の制約に合わせる。
+      _pointsError = points <= 0;
     });
     if (_titleError || _pointsError) return;
     Navigator.of(context).pop(
-      GiftItem(title: title, points: points, imageBytes: _imageBytes),
+      GiftItem(
+        id: widget.initial?.id,
+        title: title,
+        points: points,
+        alwaysVisible: _alwaysVisible,
+        imagePath: widget.initial?.imagePath,
+        imageBytes: _imageBytes,
+      ),
     );
   }
 
@@ -124,7 +133,7 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
                 ),
               ),
               icon: const Icon(Icons.photo_outlined, color: _cyan),
-              label: Text(_imageBytes == null ? '写真を選択（任意）' : '写真を変更'),
+              label: Text(_imageBytes == null ? '写真を選択(任意)' : '写真を変更'),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -169,11 +178,31 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
             if (_pointsError) ...[
               const SizedBox(height: 4),
               const Text(
-                '入力されていません',
+                '1以上の数字を入力してください',
                 style: TextStyle(color: Colors.redAccent, fontSize: 12),
               ),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            InkWell(
+              onTap: () => setState(() => _alwaysVisible = !_alwaysVisible),
+              borderRadius: BorderRadius.circular(8),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _alwaysVisible,
+                    activeColor: _cyan,
+                    onChanged: (value) => setState(() => _alwaysVisible = value ?? false),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      '常に表示する(承認後もリストに残し、繰り返し交換できるようにする)',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             ElevatedButton(
               onPressed: _handleSave,
               style: ElevatedButton.styleFrom(

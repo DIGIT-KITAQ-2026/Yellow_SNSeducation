@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/child_profile.dart';
+import '../models/gift_item.dart';
 import '../models/quest_item.dart';
 
 class ChildRegistry extends ChangeNotifier {
@@ -51,7 +52,7 @@ class ChildRegistry extends ChangeNotifier {
   /// is still present, otherwise selects the first of the new list (if any).
   void replaceGroupChildren(
     String groupCode,
-    List<({String id, String name, int points, List<QuestItem> quests})> children,
+    List<({String id, String name, int points, List<QuestItem> quests, List<GiftItem> gifts})> children,
   ) {
     final previousSelectedName = _selected?.groupCode == groupCode ? _selected?.name : null;
     _children.removeWhere((child) => child.groupCode == groupCode);
@@ -60,7 +61,8 @@ class ChildRegistry extends ChangeNotifier {
     for (final child in children) {
       final profile = ChildProfile(name: child.name, groupCode: groupCode, id: child.id)
         ..points = child.points
-        ..questItems.addAll(child.quests);
+        ..questItems.addAll(child.quests)
+        ..giftItems.addAll(child.gifts);
       _children.add(profile);
       if (child.name == previousSelectedName) restoredSelection = profile;
     }

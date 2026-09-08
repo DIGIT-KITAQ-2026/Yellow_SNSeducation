@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/gift_item.dart';
 import '../models/quest_item.dart';
 import '../models/signup_draft.dart';
 import '../models/user_profile.dart';
 import '../services/auth_service.dart';
+import '../services/gift_service.dart';
 import '../services/quest_service.dart';
 import '../services/session_bridge.dart';
 import '../theme/app_colors.dart';
@@ -51,14 +53,18 @@ class _ProfileLoaderState extends State<_ProfileLoader> {
     if (profile == null) return null;
 
     final children = await AuthService.fetchGroupChildren(profile.groupId);
-    // 親のみ、通知ベルに出す未処理の達成申請一覧をまとめて取得する。
+    // 親のみ、通知ベルに出す未処理の達成申請・交換申請一覧をまとめて取得する。
     final pendingRequests = profile.role == AccountRole.parent
         ? await QuestService.fetchPendingRequests(profile.groupId)
         : const <({String id, String childId, QuestItem item})>[];
+    final pendingExchangeRequests = profile.role == AccountRole.parent
+        ? await GiftService.fetchPendingRequests(profile.groupId)
+        : const <({String id, String childId, GiftItem item})>[];
     SessionBridge.hydrate(
       profile: profile,
       children: children,
       pendingRequests: pendingRequests,
+      pendingExchangeRequests: pendingExchangeRequests,
       email: AuthService.currentUser?.email,
     );
     return profile;

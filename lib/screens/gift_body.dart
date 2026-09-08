@@ -7,6 +7,7 @@ import '../services/app_session.dart';
 import '../services/child_notification_registry.dart';
 import '../services/child_registry.dart';
 import '../services/exchange_request_registry.dart';
+import '../services/gift_service.dart';
 import '../widgets/confirm_delete_dialog.dart';
 import '../widgets/confirm_exchange_dialog.dart';
 import '../widgets/futuristic_background.dart';
@@ -25,6 +26,7 @@ class GiftBody extends StatefulWidget {
 
 class _GiftBodyState extends State<GiftBody> {
   bool _isEditing = false;
+  bool _busy = false;
 
   ChildProfile? get _currentProfile => AppSession.instance.isChild
       ? AppSession.instance.childProfile
@@ -52,53 +54,129 @@ class _GiftBodyState extends State<GiftBody> {
 
   void _handleRegistryChange() => setState(() {});
 
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _openNewGiftDialog() async {
+    if (_busy) return;
     final profile = _currentProfile;
-    if (profile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('先に子供を登録してください')),
-      );
+    final groupId = AppSession.instance.groupId;
+    if (profile?.id == null || groupId == null) {
+      _showError('先に子供を登録してください');
       return;
     }
     final result = await showDialog<GiftItem>(
       context: context,
       builder: (_) => const NewGiftDialog(),
     );
-    if (result != null) {
-      setState(() => profile.giftItems.add(result));
+    if (result == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final created = await GiftService.createReward(
+        groupId: groupId,
+        childId: profile!.id!,
+        title: result.title,
+        points: result.points,
+        alwaysVisible: result.alwaysVisible,
+        imageBytes: result.imageBytes,
+      );
+      if (!mounted) return;
+      setState(() => profile.giftItems.add(created));
+    } catch (_) {
+      _showError('保存に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _handleDelete(GiftItem item) async {
+    if (_busy) return;
     final confirmed = await showConfirmDeleteDialog(context);
-    if (confirmed) {
+    if (!confirmed || item.id == null) return;
+
+    setState(() => _busy = true);
+    try {
+      await GiftService.deleteReward(item.id!, imagePath: item.imagePath);
+      if (!mounted) return;
       setState(() => _items.remove(item));
+    } catch (_) {
+      _showError('削除に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _openEditGiftDialog(GiftItem item) async {
+    if (_busy) return;
+    final groupId = AppSession.instance.groupId;
     final result = await showDialog<GiftItem>(
       context: context,
       builder: (_) => NewGiftDialog(initial: item),
     );
-    if (result != null) {
-      final index = _items.indexOf(item);
-      if (index != -1) {
-        setState(() => _items[index] = result);
-      }
+    final index = _items.indexOf(item);
+    if (result == null || index == -1 || result.id == null || groupId == null) return;
+
+    // ダイアログは写真を選び直さなければ同じ Uint8List インスタンスを返すので、
+    // 参照が変わっていなければ画像の再アップロードは不要。
+    final newImageBytes = identical(result.imageBytes, item.imageBytes) ? null : result.imageBytes;
+
+    setState(() => _busy = true);
+    try {
+      final updated = await GiftService.updateReward(
+        result,
+        groupId: groupId,
+        newImageBytes: newImageBytes,
+      );
+      if (!mounted) return;
+      setState(() => _items[index] = updated);
+    } catch (_) {
+      _showError('更新に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _toggleAlwaysVisible(GiftItem item) async {
+    if (_busy || item.id == null) return;
+    final index = _items.indexOf(item);
+    if (index == -1) return;
+
+    setState(() => _busy = true);
+    try {
+      final newValue = !item.alwaysVisible;
+      await GiftService.setAlwaysVisible(item.id!, newValue);
+      if (!mounted) return;
+      setState(() => _items[index] = item.copyWith(alwaysVisible: newValue));
+    } catch (_) {
+      _showError('更新に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _requestExchange(GiftItem item) async {
+    if (_busy) return;
     final confirmed = await showConfirmExchangeDialog(context, item.title);
     if (!confirmed || !mounted) return;
     final profile = _currentProfile;
     if (profile == null) return;
-    ExchangeRequestRegistry.instance.addRequest(profile, item);
-    ChildNotificationRegistry.instance.add(profile, '交換申請を行いました。');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('交換申請を送りました')),
-    );
+
+    setState(() => _busy = true);
+    try {
+      await ExchangeRequestRegistry.instance.addRequest(profile, item);
+      if (!mounted) return;
+      ChildNotificationRegistry.instance.add(profile, '交換申請を行いました。');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('交換申請を送りました')),
+      );
+    } catch (_) {
+      _showError('送信に失敗しました。もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -146,6 +224,7 @@ class _GiftBodyState extends State<GiftBody> {
                       isEditing: !isChild && _isEditing,
                       onEdit: () => _openEditGiftDialog(item),
                       onDelete: () => _handleDelete(item),
+                      onToggleAlwaysVisible: () => _toggleAlwaysVisible(item),
                       childProfile: isChild ? profile : null,
                       onRequestExchange: () => _requestExchange(item),
                     ),
@@ -234,6 +313,7 @@ class _GiftItemCard extends StatelessWidget {
     required this.isEditing,
     required this.onEdit,
     required this.onDelete,
+    required this.onToggleAlwaysVisible,
     required this.childProfile,
     required this.onRequestExchange,
   });
@@ -242,13 +322,14 @@ class _GiftItemCard extends StatelessWidget {
   final bool isEditing;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onToggleAlwaysVisible;
   final ChildProfile? childProfile;
   final VoidCallback onRequestExchange;
 
   @override
   Widget build(BuildContext context) {
     final pending = ExchangeRequestRegistry.instance.hasPendingRequest(item);
-    final cost = int.tryParse(item.points) ?? 0;
+    final cost = item.points;
     final insufficientPoints = childProfile != null && childProfile!.points < cost;
     return Stack(
       children: [
@@ -291,9 +372,25 @@ class _GiftItemCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                '${item.points}P',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: _cyan),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${item.points}P',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: _cyan),
+                  ),
+                  InkWell(
+                    onTap: isEditing ? onToggleAlwaysVisible : null,
+                    customBorder: const CircleBorder(),
+                    child: Icon(
+                      item.alwaysVisible ? Icons.push_pin : Icons.push_pin_outlined,
+                      size: 12,
+                      color: item.alwaysVisible
+                          ? _magenta
+                          : Colors.white.withValues(alpha: isEditing ? 0.4 : 0.2),
+                    ),
+                  ),
+                ],
               ),
               if (insufficientPoints) ...[
                 const SizedBox(height: 2),

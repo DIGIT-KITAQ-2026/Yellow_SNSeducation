@@ -4,7 +4,7 @@
 **マイグレーションのSQLが正**であり、このドキュメントはそれを読み解くための資料です。スキーマを変更したら、このドキュメントも合わせて更新してください。
 
 - 対象プロジェクト: `Dokagaki-edu-sns` (ap-northeast-1)
-- 適用済みマイグレーション: `0001` 〜 `0008`
+- 適用済みマイグレーション: `0001` 〜 `0012`
 
 ## 目次
 
@@ -24,7 +24,7 @@
 | # | 方針 | 理由 |
 |---|---|---|
 | 1 | 基盤は Supabase (PostgreSQL) + Supabase Auth、アクセス制御は RLS | 認証・DB・ストレージを1つで賄え、クライアント(Flutter)から直接安全に叩ける |
-| 2 | ポイント残高・やることリストは**子どもごと**。プレゼントは**グループ共有** | 兄弟がいても、誰が何をやって何ポイント持っているかが混ざらない |
+| 2 | ポイント残高・やることリスト・プレゼントは**子どもごと** | 兄弟がいても、誰が何をやって何ポイント持っているか・何と交換できるかが混ざらない |
 | 3 | タスクは**1回きり**。繰り返し定義は持たない | 仕様として繰り返しは不要。必要なら親が都度作成する |
 | 4 | スクリーンタイムの生データは**直近分のみ**保持 | 子どもの詳細な行動ログを長期に持たない。保持日数は関数1つで変更可能 |
 | 5 | ドパガキ指数・AI講評は**保持期間の対象外** | 生データを消しても、指数の推移だけは残して振り返れるようにするため |
@@ -44,9 +44,9 @@ erDiagram
     groups ||--o{ profiles : "has members"
     profiles ||--o{ tasks : "assigned to"
     tasks ||--o{ task_requests : "requested via"
-    groups ||--o{ rewards : "offers"
-    rewards ||--o{ reward_redemptions : "redeemed as"
-    profiles ||--o{ reward_redemptions : "redeemed by"
+    profiles ||--o{ rewards : "owned by"
+    rewards ||--o{ reward_redemptions : "requested/redeemed as"
+    profiles ||--o{ reward_redemptions : "requested by"
     profiles ||--o{ point_entries : "ledger for"
     profiles ||--o{ screen_time_daily : "tracked for"
     screen_time_daily ||--o{ screen_time_apps : "breaks down into"
@@ -86,8 +86,10 @@ erDiagram
     rewards {
         uuid id PK
         uuid group_id FK
+        uuid child_id FK "owning child"
         text name
         int cost_points
+        boolean always_visible
     }
     reward_redemptions {
         uuid id PK
@@ -95,6 +97,7 @@ erDiagram
         uuid child_id FK
         text reward_name "snapshot"
         int cost_points "snapshot"
+        request_status status "pending/approved/rejected"
     }
     point_entries {
         uuid id PK
@@ -225,35 +228,51 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 - 却下された後は再申請できる(`rejected` は部分indexの対象外のため)
 - 承認されると `tasks` の削除に cascade されてこの行も消える。**同じ `task_id` に過去の却下済み申請があれば、それも一緒に削除される**(`status = 'approved'` / `decided_by` / `decided_at` は列としては残すが、承認された行は削除されるため実際には残らない)
 
-### `rewards` — プレゼント(グループ共有)
+### `rewards` — プレゼント(子どもごと)
 
-親が用意した交換対象。グループ内のどの子でも、ポイントが足りれば交換できる。
+親が特定の子ども1人に向けて用意した交換対象。`group_id` は RLS・一覧表示を速くするための冗長列で、実際の所有者は `child_id`。
 
 | 列 | 型 | 制約 | 説明 |
 |---|---|---|---|
 | `id` | uuid | PK | |
 | `group_id` | uuid | not null → `groups(id)` on delete cascade | |
+| `child_id` | uuid | not null → `profiles(id)` on delete cascade | **対象の子**(0011で追加) |
 | `name` | text | not null | 名称(必須) |
 | `cost_points` | int | not null, check `> 0` | 必要ポイント(必須) |
-| `image_path` | text | | 画像(任意)。Supabase Storage のパス |
+| `image_path` | text | | 画像(任意)。Supabase Storage `gift-images` バケットのパス(`<group_id>/<reward_id>.<ext>`) |
+| `always_visible` | boolean | not null, default false | true なら承認後もこの行を残し、繰り返し交換できる(0011で追加) |
 | `is_active` | boolean | not null, default true | false にすると交換できなくなる |
 | `created_by` | uuid | not null → `profiles(id)` | 作成した親 |
 | `created_at` / `updated_at` | timestamptz | not null, default `now()` | |
 
-> UIの「ポイントが足りると色が変わる」は、クライアント側で `point_balance >= cost_points` を判定するだけでよく、DB列は不要です。
+- **`rewards_child_in_group`** … `(child_id, group_id) → profiles(id, group_id)` の複合外部キー。`tasks_child_in_group` と同じ役割
+- インデックス: `(child_id) where is_active`
+- `always_visible = false`(既定)のプレゼントは、承認された時点で `rewards` 行ごと物理削除される(1回限り)。`true` のものは残り続け、何度でも交換申請できる
+- 親の編集モードで「常に表示」の切り替え(`GiftService.setAlwaysVisible`)ができる
+- UIの「ポイントが足りると色が変わる」は、クライアント側で `point_balance >= cost_points` を判定するだけでよく、DB列は不要
 
-### `reward_redemptions` — 交換履歴
+### `reward_redemptions` — 交換申請 兼 交換履歴
+
+子どもの交換申請(`pending`)から、親の承認/却下までを1行で管理する。`task_requests` と違い、承認後にこの行自体が削除されるかどうかは `rewards.always_visible` に依存する(下記参照)。
 
 | 列 | 型 | 制約 | 説明 |
 |---|---|---|---|
 | `id` | uuid | PK | |
 | `reward_id` | uuid | → `rewards(id)` **on delete set null** | 親が後で消しても履歴は残る |
-| `child_id` | uuid | not null → `profiles(id)` | |
-| `reward_name` | text | not null | **交換時点のスナップショット** |
-| `cost_points` | int | not null | **交換時点のスナップショット** |
-| `redeemed_at` | timestamptz | not null, default `now()` | |
+| `child_id` | uuid | not null → `profiles(id)` | 申請した子 |
+| `reward_name` | text | not null | **申請時点のスナップショット** |
+| `cost_points` | int | not null | **申請時点のスナップショット** |
+| `status` | `request_status` | not null, default `pending`(0011で追加) | |
+| `decided_by` | uuid | → `profiles(id)`(0011で追加) | 承認/却下した親 |
+| `decided_at` | timestamptz | (0011で追加) | |
+| `redeemed_at` | timestamptz | not null, default `now()` | 申請日時 |
 
-> 名称と必要ポイントをスナップショットしているため、親がプレゼントを編集・削除しても「あのとき何を何ポイントで交換したか」は正しく残ります。
+- **部分unique index `(reward_id) where status = 'pending'`** … `task_requests` と同様、1つのプレゼントに同時に複数の申請が並ばないようにする
+- 却下された後は再申請できる(`rejected` は部分indexの対象外のため)
+- **承認時の行の扱い**: `approve_reward_request` が `rewards.always_visible` を見て分岐する
+  - `always_visible = false` → `rewards` 行ごと物理削除(この `reward_redemptions` 行は `on delete set null` で `reward_id` が null になって残る = 交換履歴として残る)
+  - `always_visible = true` → `rewards` 行は残す。**`reward_redemptions` 行だけ削除**(`point_entries.redemption_id` が `on delete set null` で null になるが、台帳の記録自体は残る)。つまりこのケースでは交換履歴として `reward_redemptions` には残らない
+- 名称と必要ポイントをスナップショットしているため、親がプレゼントを編集・削除しても「あのとき何を何ポイントで交換したか」は(残っている場合)正しく分かる
 
 ### `point_entries` — ポイント台帳
 
@@ -355,7 +374,9 @@ READMEの「余裕があれば実装したい機能」向け。テーブルとRP
 | `join_group` | [0002](../supabase/migrations/0002_profiles.sql) | `code`, `child_display_name` | コードでグループを探し、子プロフィールを作成。`group_id` を返す |
 | `approve_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0010](../supabase/migrations/0010_delete_task_on_approve.sql)で更新 | `request_id` | 台帳に加算行 → 残高加算 → `tasks` を物理削除(cascadeで `task_requests` も削除、`point_entries.task_request_id` は null に) |
 | `reject_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `request_id` | 申請を `rejected` に(タスクは `open` のまま = 再申請可能) |
-| `redeem_reward` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `reward_id` | 残高チェック → 交換履歴 → 台帳に減算行 → 残高減算 |
+| `request_reward` | [0011](../supabase/migrations/0011_reward_requests.sql) | `reward_id` | 残高チェック → `reward_redemptions` に `pending` 行を作成(ポイントはまだ減らさない)。生成した申請 id を返す |
+| `approve_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql) | `request_id` | 残高再チェック → 台帳に減算行 → 残高減算 → `rewards.always_visible` に応じて `reward_redemptions` 行 or `rewards` 行を削除 |
+| `reject_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql) | `request_id` | 申請を `rejected` に(プレゼント・ポイントとも変化なし = 再申請可能) |
 | `recompute_point_balance` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `target_child_id` | 台帳から残高を再計算して返す(照合用、更新はしない) |
 | `approve_activity_request` | [0006](../supabase/migrations/0006_activities.sql) | `request_id`, `points` | 申請を `approved` → `tasks` を生成 → `created_task_id` にリンク。生成した task id を返す |
 | `reject_activity_request` | [0006](../supabase/migrations/0006_activities.sql) | `request_id` | 申請を `rejected` に |
@@ -369,16 +390,16 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 
 - 既にプロフィールがある状態で `create_parent_account` / `join_group` → `This account already has a profile`
 - 存在しないコードで `join_group` → `No group found for code XXXX`
-- `pending` でない申請を承認/却下 → `Task request ... is not pending`
-- 存在しない(既に承認されて削除済みの) `request_id` で承認/却下 → `Task request ... not found`
-- 残高不足で `redeem_reward` → `Insufficient points: have X, need Y`
+- `pending` でない申請を承認/却下 → `Task request ... is not pending` / `Reward request ... is not pending`
+- 存在しない(既に承認されて削除済みの) `request_id` で承認/却下 → `Task request ... not found` / `Reward request ... not found`
+- 残高不足で `request_reward` / `approve_reward_request` → `Insufficient points: have X, need Y`
 - `points <= 0` で `approve_activity_request` → `points must be positive`
 
 ---
 
 ## RLS(アクセス制御)
 
-全12テーブルで RLS 有効。詳細は [0007_rls.sql](../supabase/migrations/0007_rls.sql)。
+全12テーブルで RLS 有効。詳細は [0007_rls.sql](../supabase/migrations/0007_rls.sql)。Storage の `gift-images` バケットは [0012_gift_images_bucket.sql](../supabase/migrations/0012_gift_images_bucket.sql) で別途ポリシーを定義。
 
 ### ヘルパー関数
 
@@ -398,7 +419,7 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 | `tasks` | **親: グループ全件 / 子: 自分宛のみ** | 親のみ | 親のみ | 親のみ |
 | `task_requests` | 子: 自分の分 / 親: グループ内 | 子が自分宛の `open` タスクに対してのみ | RPC経由のみ | — |
 | `rewards` | 同一グループ全員 | 親のみ | 親のみ | 親のみ |
-| `reward_redemptions` | 同一グループ全員 | RPC経由のみ | — | — |
+| `reward_redemptions` | 同一グループ全員 | RPC経由のみ | RPC経由のみ | — |
 | `point_entries` | 同一グループ全員 | RPC経由のみ | — | — |
 | `screen_time_daily` | 同一グループ全員 | 子本人のみ | 子本人のみ | — |
 | `screen_time_apps` | 同一グループ全員 | 子本人のみ | 子本人のみ | — |
@@ -407,6 +428,17 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 | `activity_requests` | 子: 自分の分 / 親: グループ内 | 子が自分の分のみ | RPC経由のみ | — |
 
 ※ `profiles` の UPDATE は本人のみ許可。`point_balance` の変更はトリガで別途禁止しているため、実質 `display_name` / `avatar_url` のみ変更可能。
+
+### Storage: `gift-images` バケット
+
+非公開バケット。オブジェクトキーは `<group_id>/<reward_id>.<ext>` の形式で、先頭フォルダ名(= `group_id`)で読み書きをグループ内に限定する([0012_gift_images_bucket.sql](../supabase/migrations/0012_gift_images_bucket.sql))。
+
+| 操作 | 条件 |
+|---|---|
+| SELECT | 同一グループ全員(`(storage.foldername(name))[1] = current_group_id()::text`) |
+| INSERT / UPDATE / DELETE | 上記に加え `is_parent()` |
+
+非公開のため、クライアントは署名付きURLではなく `storage.download()` で `Uint8List` を取得して `Image.memory` に渡す(`GiftService.downloadImage`)。
 
 ### 重要な前提
 
@@ -437,15 +469,28 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
       過去の却下済み申請があればそれも一緒に消える)
 ```
 
-### プレゼント交換
+### プレゼント交換(承認フロー)
 
 ```
-親: insert into rewards (group_id, name, cost_points, created_by) values (..., 'Ankerイヤホン', 150, ...)
-子: select redeem_reward('<reward_id>')
+親: insert into rewards (group_id, child_id, name, cost_points, always_visible, created_by)
+      values (..., 'たろう', 'Ankerイヤホン', 150, false, ...)
+子: select request_reward('<reward_id>')                -- 交換申請
     → 残高 < 150 なら例外
-    → reward_redemptions に履歴(name/cost をスナップショット)
+    → reward_redemptions に pending 行(name/cost をスナップショット)
+      ※ この時点ではまだポイントは減らない
+
+親: select approve_reward_request('<request_id>')       -- 承認
+    → 残高を再チェック(不足していれば例外で失敗、却下にはならない)
     → point_entries に -150 の行
     → profiles.point_balance -= 150
+    → always_visible = false なら rewards を物理削除(1回限り)
+    → always_visible = true  なら reward_redemptions の申請行だけ削除(プレゼントは残り再交換可)
+
+  または
+
+親: select reject_reward_request('<request_id>')        -- 却下
+    → reward_redemptions.status = 'rejected'。ポイント・プレゼントとも変化なし
+    → 子は同じプレゼントに再度 request_reward できる
 ```
 
 ### スクリーンタイム同期とAI講評

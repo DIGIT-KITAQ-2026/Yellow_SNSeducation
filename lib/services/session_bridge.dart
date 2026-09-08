@@ -1,10 +1,12 @@
 import '../models/child_profile.dart';
+import '../models/gift_item.dart';
 import '../models/quest_item.dart';
 import '../models/signup_draft.dart';
 import '../models/user_profile.dart';
 import 'achievement_request_registry.dart';
 import 'app_session.dart';
 import 'child_registry.dart';
+import 'exchange_request_registry.dart';
 import 'screen_time_registry.dart';
 
 /// Bridges the Supabase-backed [UserProfile] onto the UI lineage's global
@@ -18,12 +20,13 @@ class SessionBridge {
 
   static void hydrate({
     required UserProfile profile,
-    required List<({String id, String name, int points, List<QuestItem> quests})> children,
+    required List<({String id, String name, int points, List<QuestItem> quests, List<GiftItem> gifts})> children,
     List<({String id, String childId, QuestItem item})> pendingRequests = const [],
+    List<({String id, String childId, GiftItem item})> pendingExchangeRequests = const [],
     String? email,
   }) {
     // children はそのまま ChildRegistry.replaceGroupChildren に渡す
-    // (id/name/points/quests を保ったまま)。
+    // (id/name/points/quests/gifts を保ったまま)。
     ChildRegistry.instance.replaceGroupChildren(profile.groupCode, children);
 
     if (profile.role == AccountRole.parent) {
@@ -38,6 +41,7 @@ class SessionBridge {
       )..points = profile.pointBalance;
       if (matchingChild.isNotEmpty) {
         childProfile.questItems.addAll(matchingChild.first.quests);
+        childProfile.giftItems.addAll(matchingChild.first.gifts);
       }
       AppSession.instance.loginAsChild(childProfile);
     }
@@ -47,8 +51,11 @@ class SessionBridge {
     AppSession.instance.setGroupName(profile.groupName);
     if (email != null) AppSession.instance.setCurrentEmail(email);
 
-    // サーバが正: 親の未処理の達成申請一覧を丸ごと差し替える。
+    // サーバが正: 親の未処理の達成申請・交換申請一覧を丸ごと差し替える。
+    // ChildRegistry.replaceGroupChildren の後である必要がある(実体の
+    // ChildProfile を解決するため)。
     AchievementRequestRegistry.instance.replaceAll(pendingRequests);
+    ExchangeRequestRegistry.instance.replaceAll(pendingExchangeRequests);
   }
 
   /// Resets the UI lineage's state. Used on sign-out.

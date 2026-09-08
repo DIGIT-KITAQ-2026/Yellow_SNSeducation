@@ -14,10 +14,36 @@ class ExchangeReviewDialog extends StatefulWidget {
 
 class _ExchangeReviewDialogState extends State<ExchangeReviewDialog> {
   bool _tapped = false;
+  bool _submitting = false;
 
-  void _confirm() {
-    ExchangeRequestRegistry.instance.stamp(widget.request);
-    Navigator.of(context).pop();
+  Future<void> _confirm() async {
+    setState(() => _submitting = true);
+    try {
+      await ExchangeRequestRegistry.instance.stamp(widget.request);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('通信に失敗しました。もう一度お試しください')),
+      );
+    }
+  }
+
+  Future<void> _reject() async {
+    setState(() => _submitting = true);
+    try {
+      await ExchangeRequestRegistry.instance.reject(widget.request);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('通信に失敗しました。もう一度お試しください')),
+      );
+    }
   }
 
   @override
@@ -89,7 +115,7 @@ class _ExchangeReviewDialogState extends State<ExchangeReviewDialog> {
             if (!request.stamped && _tapped) ...[
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _confirm,
+                onPressed: _submitting ? null : _confirm,
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -97,6 +123,21 @@ class _ExchangeReviewDialogState extends State<ExchangeReviewDialog> {
                   ),
                 ),
                 child: const Text('完了'),
+              ),
+            ],
+            if (!request.stamped && !_tapped) ...[
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: _submitting ? null : _reject,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: const BorderSide(color: Colors.redAccent),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('却下'),
               ),
             ],
           ],
