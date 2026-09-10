@@ -1,10 +1,25 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- 周辺アクティビティ提案で、おおよその現在地(市区町村レベル)を取得する。
          提案の精度には数百m〜数kmの誤差で十分なので FINE は要求しない。 -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- Supabase / Edge Function への通信。debugビルドでは自動付与されるが、
          releaseビルドでは明示が必要。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- スクリーンタイム機能で UsageStatsManager からアプリ別利用時間を読むための
+         特別なアクセス権。通常の実行時権限とは異なり、ユーザーが端末の設定画面
+         (ACTION_USAGE_ACCESS_SETTINGS)から自分で許可する必要がある。 -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
+    <!-- 上記で取得したパッケージ名からアプリ名を解決するために、
+         Android 11+ のパッケージ可視性制限を越えて全アプリを列挙できるようにする。 -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission"/>
+    <!-- 毎朝8時のスクリーンタイム確認通知(flutter_local_notifications)を表示するための
+         Android 13+ の実行時権限。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 端末再起動後もスケジュール済みの毎朝の通知アラームを復元するため。 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="yellow_sns_education"
         android:name="${applicationName}"
@@ -36,6 +51,22 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- flutter_local_notifications: 毎朝8時のスケジュール通知を実際に発火させるレシーバー。
+             このバージョンのプラグインは自身のAndroidManifestに含めていないため、アプリ側で
+             明示的に宣言する必要がある。 -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
+        <!-- 端末再起動後にスケジュール済みの毎朝の通知アラームを再設定するレシーバー。 -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

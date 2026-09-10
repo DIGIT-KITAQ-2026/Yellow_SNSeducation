@@ -7,8 +7,12 @@
 // リクエストボディ:
 //   { child_id: string, date: string (YYYY-MM-DD),
 //     screen_time: { total_minutes: number,
-//                    apps: { name: string, minutes: number, is_distracting: boolean }[] },
+//                    apps: { name: string, minutes: number, app_id?: string }[] },
 //     force?: boolean }
+//
+// どのアプリが「ドパガキ対象」(SNS・動画・ゲーム)かはクライアントでは判定せず、
+// アプリ名とパッケージ名から Gemini に判定させる。対象アプリは次々に増えるため、
+// アプリ側の固定カタログでは追いつかないという判断。
 //
 // 必要な環境変数(secrets):
 //   GEMINI_API_KEY (必須)
@@ -30,7 +34,8 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 interface AppUsageInput {
   name: string;
   minutes: number;
-  is_distracting: boolean;
+  /** Android のパッケージ名。表示名だけでは何のアプリか判別できない場合の手がかり。 */
+  app_id?: string;
 }
 
 interface RequestBody {
@@ -45,6 +50,7 @@ interface RequestBody {
 
 interface GeminiResult {
   dopagaki_score: number;
+  score_reason: string;
   summary: string;
   advice: string[];
 }
@@ -109,7 +115,7 @@ Deno.serve(async (req) => {
   if (!force) {
     const { data: existing } = await admin
       .from("ai_reviews")
-      .select("dopagaki_score, comment, advice, model, created_at")
+      .select("dopagaki_score, score_reason, comment, advice, model, created_at")
       .eq("child_id", child_id)
       .eq("date", date)
       .maybeSingle();
@@ -117,6 +123,7 @@ Deno.serve(async (req) => {
     if (existing) {
       return jsonResponse({
         dopagaki_score: existing.dopagaki_score,
+        score_reason: existing.score_reason,
         summary: existing.comment,
         advice: existing.advice ?? [],
         model: existing.model,
@@ -150,6 +157,7 @@ Deno.serve(async (req) => {
       child_id,
       date,
       dopagaki_score: clampedScore,
+      score_reason: result.score_reason,
       comment: result.summary,
       advice: result.advice,
       model: GEMINI_MODEL,
@@ -164,6 +172,7 @@ Deno.serve(async (req) => {
 
   return jsonResponse({
     dopagaki_score: clampedScore,
+    score_reason: result.score_reason,
     summary: result.summary,
     advice: result.advice,
     model: GEMINI_MODEL,
@@ -178,13 +187,15 @@ async function callGemini(input: {
   totalMinutes: number;
   apps: AppUsageInput[];
 }): Promise<GeminiResult> {
-  // アプリ別内訳(アプリ名・利用分数・ドパガキ対象かどうか)を箇条書きにして
-  // プロンプトへ渡す。一極集中の判断材料になるよう、利用時間の多い順に並べる。
+  // アプリ別内訳(アプリ名・パッケージ名・利用分数)を箇条書きにしてプロンプトへ
+  // 渡す。一極集中の判断材料になるよう、利用時間の多い順に並べる。パッケージ名も
+  // 載せるのは、表示名だけでは何のアプリか判別できないケース(端末固有の名前、
+  // 同名の別アプリ)があるため。
   const sortedApps = [...input.apps].sort((a, b) => b.minutes - a.minutes);
   const appLines = sortedApps.length === 0
     ? "(記録なし)"
     : sortedApps
-      .map((a) => `- ${a.name}: ${a.minutes}分 (${a.is_distracting ? "ドパガキ対象" : "対象外"})`)
+      .map((a) => `- ${a.name}${a.app_id ? ` [${a.app_id}]` : ""}: ${a.minutes}分`)
       .join("\n");
 
   const systemInstruction = [
@@ -196,23 +207,41 @@ async function callGemini(input: {
 
   const prompt = [
     `対象の子ども: ${input.childName}`,
-    `対象日: ${input.date}`,
-    `総利用時間: ${input.totalMinutes}分`,
+    `対象日: ${input.date}(この1日分のみのデータです。前日以前との比較や増減には触れないでください)`,
+    `総利用時間: ${input.totalMinutes}分(下記アプリ別内訳の合計)`,
     "アプリ別内訳(利用時間が多い順):",
     appLines,
     "",
-    "上記のアプリ別内訳をもとに、次の3つをJSONで生成してください。",
+    "内訳の読み方:",
+    "- 各行は「アプリの表示名 [Androidのパッケージ名]: 利用時間」です。" +
+    "パッケージ名は、表示名だけでは何のアプリか分からないときの手がかりに使ってください。",
+    "- どのアプリが「ドパガキ対象」かは、あなたがアプリ名とパッケージ名から判断してください。" +
+    "ドパガキ対象とは、SNS・動画・ショート動画・ゲームなど、短時間で強い刺激が得られて" +
+    "没入しやすく、つい長時間使ってしまうアプリを指します。",
+    "- 記録は端末のアプリ利用時間そのものなので、学習アプリ・音楽・カメラ・地図・" +
+    "連絡手段など、ドパガキ対象ではないアプリも含まれます。これらの利用時間を" +
+    "依存の根拠にしないでください。",
+    "- ブラウザのように用途が一つに定まらないアプリは、断定を避けて慎重に扱ってください。",
+    "- 何のアプリか判断できない場合は、無理に分類せず言及も避けてください。",
+    "- 内訳に無いアプリについては何も述べないでください。憶測でアプリ名を挙げるのは禁止です。",
     "",
-    "1. dopagaki_score (0-100の整数): 「ドパガキ指数」。SNS・動画・ゲームなど" +
-    "「ドパガキ対象」アプリへの依存・没入の深刻さを表す点数で、高いほど深刻です。" +
+    "以上をもとに、次の4つをJSONで生成してください。",
+    "",
+    "1. dopagaki_score (0-100の整数): 「ドパガキ指数」。ドパガキ対象アプリへの" +
+    "依存・没入の深刻さを表す点数で、高いほど深刻です。" +
     "単純な利用時間の割合ではなく、アプリ別内訳から次の3点を総合して採点してください。" +
     "(a) ドパガキ対象アプリの絶対的な利用時間の長さ(長時間ほど高スコア)、" +
     "(b) 特定の1アプリへの一極集中の度合い(偏っているほど高スコア)、" +
     "(c) 総利用時間に占めるドパガキ対象アプリの割合。" +
-    "総利用時間そのものが短い日は、割合が高くてもスコアを抑えめにしてください。",
-    "2. summary (文字列): 上記の講評を2-3文程度で。特によく使われているアプリに触れつつ、" +
+    "総利用時間そのものが短い日は、割合が高くてもスコアを抑えめにしてください。" +
+    "内訳が空(記録なし)の場合は0にしてください。",
+    "2. score_reason (文字列): その点数にした理由を1-2文で。" +
+    "どのアプリの何分をドパガキ対象と見たか、上の(a)(b)(c)のどれが効いたかを、" +
+    "実際の数字を挙げて説明してください。保護者が読んで納得できる説明にしてください。",
+    "3. summary (文字列): 上記の講評を2-3文程度で。特によく使われているアプリに触れつつ、" +
     "適切な距離感でのSNS利用を促すトーン。",
-    "3. advice (文字列の配列、1-3件): 保護者が子どもに提案できる具体的なアクション。",
+    "4. advice (文字列の配列、1-3件): 保護者が子どもに提案できる具体的なアクション。" +
+    "内訳に実際に出てきたアプリに即した内容にしてください。",
   ].join("\n");
 
   const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
@@ -232,16 +261,18 @@ async function callGemini(input: {
           type: "object",
           properties: {
             dopagaki_score: { type: "integer", minimum: 0, maximum: 100 },
+            score_reason: { type: "string" },
             summary: { type: "string" },
             advice: { type: "array", items: { type: "string" } },
           },
-          required: ["dopagaki_score", "summary", "advice"],
+          required: ["dopagaki_score", "score_reason", "summary", "advice"],
         },
       },
       // 実測(2026-09-10)で800では途中で切れてJSON.parseが失敗することを確認した
       // (advice配列の生成中に打ち切られた)。Gemini 3系は思考トークンもこの枠から
-      // 消費するため、score+summary+advice(最大3件)の分量に対して余裕を持たせる。
-      generation_config: { max_output_tokens: 2000 },
+      // 消費するため、score+score_reason+summary+advice(最大3件)の分量に対して
+      // 余裕を持たせる。
+      generation_config: { max_output_tokens: 2500 },
     }),
   });
 
@@ -278,6 +309,7 @@ async function callGemini(input: {
 
   const obj = parsed as Record<string, unknown>;
   const score = Number(obj.dopagaki_score);
+  const scoreReason = String(obj.score_reason ?? "");
   const summary = String(obj.summary ?? "");
   const advice = Array.isArray(obj.advice) ? obj.advice.map((a) => String(a)) : [];
 
@@ -285,5 +317,5 @@ async function callGemini(input: {
     throw new Error(`Gemini JSON output missing required fields: ${joined}`);
   }
 
-  return { dopagaki_score: score, summary, advice };
+  return { dopagaki_score: score, score_reason: scoreReason, summary, advice };
 }

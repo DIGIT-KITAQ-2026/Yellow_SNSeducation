@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -7,6 +9,7 @@ import '../models/signup_draft.dart';
 import '../models/user_profile.dart';
 import '../services/activity_service.dart';
 import '../services/auth_service.dart';
+import '../services/daily_notification_service.dart';
 import '../services/gift_service.dart';
 import '../services/quest_service.dart';
 import '../services/session_bridge.dart';
@@ -72,6 +75,12 @@ class _ProfileLoaderState extends State<_ProfileLoader> {
       pendingActivityRequests: pendingActivityRequests,
       email: AuthService.currentUser?.email,
     );
+    // ログインを待たせないよう fire-and-forget。失敗しても本筋には影響しない
+    // (DailyNotificationService.syncForSession が内部で例外を握っている)。
+    unawaited(DailyNotificationService.instance.syncForSession(
+      isChild: profile.role == AccountRole.child,
+      childNames: [for (final c in children) c.name],
+    ));
     return profile;
   }
 

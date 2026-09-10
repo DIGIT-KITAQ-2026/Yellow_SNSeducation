@@ -39,7 +39,6 @@ class _FakeScreenTimeService implements ScreenTimeService {
             appName: 'YouTube',
             duration: Duration(minutes: 30),
             color: Colors.red,
-            isDistracting: true,
           ),
         ],
       ),
@@ -52,6 +51,7 @@ class _FakeAiCommentaryService implements AiCommentaryService {
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
+    bool force = false,
   }) async {
     return AiCommentary(
       summary: 'テスト用の講評です。',

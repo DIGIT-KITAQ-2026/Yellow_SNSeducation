@@ -64,6 +64,7 @@ class SupabaseAiCommentaryService implements AiCommentaryService {
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
+    bool force = false,
   }) async {
     final childId = child.id;
     if (childId == null) {
@@ -82,6 +83,7 @@ class SupabaseAiCommentaryService implements AiCommentaryService {
         body: {
           'child_id': childId,
           'date': _formatDate(screenTime.date),
+          'force': force,
           'screen_time': {
             'total_minutes': screenTime.total.inMinutes,
             'apps': [
@@ -89,7 +91,7 @@ class SupabaseAiCommentaryService implements AiCommentaryService {
                 {
                   'name': usage.appName,
                   'minutes': usage.duration.inMinutes,
-                  'is_distracting': usage.isDistracting,
+                  if (usage.appId != null) 'app_id': usage.appId,
                 },
             ],
           },
@@ -118,6 +120,7 @@ class SupabaseAiCommentaryService implements AiCommentaryService {
       summary: summary,
       adviceList: advice,
       generatedAt: generatedAt,
+      scoreReason: data['score_reason'] as String?,
       dopagakiIndex: DopagakiIndex(
         percentage: percentage,
         label: DopagakiCalculator.labelFor(percentage),

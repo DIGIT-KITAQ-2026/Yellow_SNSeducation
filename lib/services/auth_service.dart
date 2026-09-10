@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/gift_item.dart';
 import '../models/quest_item.dart';
 import '../models/user_profile.dart';
+import 'daily_notification_service.dart';
 import 'gift_service.dart';
 import 'quest_service.dart';
 
@@ -32,7 +33,13 @@ class AuthService {
     return response.session != null;
   }
 
-  static Future<void> signOut() => _client.auth.signOut();
+  /// サインアウト前に、この端末に残っている毎朝のスクリーンタイム通知の
+  /// スケジュールを消す。次に別のユーザーがログインするまで、前のユーザー
+  /// 向けの文面が届き続けないようにするため。
+  static Future<void> signOut() async {
+    await DailyNotificationService.instance.cancelAll();
+    await _client.auth.signOut();
+  }
 
   /// Creates the group and the caller's parent profile, returning the
   /// server-generated 4-digit group code.

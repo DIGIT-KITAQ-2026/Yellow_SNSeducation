@@ -24,13 +24,11 @@ class _FakeScreenTimeService implements ScreenTimeService {
             appName: 'YouTube',
             duration: Duration(minutes: 90),
             color: Colors.red,
-            isDistracting: true,
           ),
           AppUsage(
             appName: '勉強アプリ',
             duration: Duration(minutes: 30),
             color: Colors.blue,
-            isDistracting: false,
           ),
         ],
       ),
@@ -43,11 +41,13 @@ class _FakeAiCommentaryService implements AiCommentaryService {
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
+    bool force = false,
   }) async {
     return AiCommentary(
       summary: 'テスト用の講評です。',
       adviceList: const ['テスト用のアドバイス'],
       generatedAt: DateTime(2026, 9, 7, 9, 0),
+      scoreReason: 'YouTube 90分がドパガキ対象で、総利用時間120分の大半を占めるためです。',
       dopagakiIndex: const DopagakiIndex(percentage: 75, label: '危険'),
     );
   }
@@ -96,6 +96,23 @@ void main() {
 
     expect(find.text('講評を見る'), findsNothing);
     expect(find.text('テスト用の講評です。'), findsOneWidget);
+  });
+
+  testWidgets('講評にはドパガキ指数の採点理由が表示される', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.scrollUntilVisible(find.text('講評を見る'), 300);
+    await tester.tap(find.text('講評を見る'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('ドパガキ指数 75%(危険)の理由'), findsOneWidget);
+    expect(
+      find.text('YouTube 90分がドパガキ対象で、総利用時間120分の大半を占めるためです。'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('ドパガキ指数はAI講評生成前は未算出、生成後はAIの値になる', (tester) async {

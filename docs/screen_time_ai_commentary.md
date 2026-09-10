@@ -12,6 +12,7 @@ DBスキーマ・RPCの詳細は [db_schema.md](db_schema.md) を参照。
 - [ホーム画面の表示ロジック(HomeBody)](#ホーム画面の表示ロジックhomebody)
 - [状態管理(ScreenTimeRegistry)](#状態管理screentimeregistry)
 - [ドパガキ指数の算出](#ドパガキ指数の算出)
+- [ドパガキ対象アプリの判定](#ドパガキ対象アプリの判定)
 - [カード一覧](#カード一覧)
 - [データ取得の抽象化とモック実装](#データ取得の抽象化とモック実装)
 - [UIスタイル](#uiスタイル)
@@ -32,7 +33,8 @@ DBスキーマ・RPCの詳細は [db_schema.md](db_schema.md) を参照。
 ### 用語
 
 - **ドパガキ指数** … SNS・動画・ゲームなど「ドパガキ対象アプリ」への依存・没入の深刻さをAIが0〜100で採点した指標。高いほど依存が深刻。DB上は `ai_reviews.dopagaki_score`([db_schema.md](db_schema.md#ai_reviews--ai講評--ドパガキ指数))に対応する概念。
-- **AI講評** … その日のスクリーンタイムをもとにした、要約(`summary`)とアドバイス(`adviceList`)のセット。
+- **AI講評** … その日のスクリーンタイムをもとにした、要約(`summary`)・アドバイス(`adviceList`)・ドパガキ指数の採点理由(`scoreReason`)のセット。
+- **ドパガキ対象アプリ** … 短時間で強い刺激が得られて没入しやすいアプリ(SNS・動画・ショート動画・ゲーム)。**どのアプリが対象かはアプリ側では判定せず、Geminiがアプリ名とパッケージ名から都度判断する**([ドパガキ対象アプリの判定](#ドパガキ対象アプリの判定)参照)。
 
 ---
 
@@ -156,6 +158,26 @@ Column(
 
 `ScreenTimeRegistry.dopagakiIndexFor` は、講評未生成の間は `DopagakiIndex.notGenerated`(「未算出」)を返す。「昨日のドパガキ指数」カード([dopagaki_index_card.dart](../lib/widgets/dopagaki_index_card.dart))はこのとき数値の代わりに「—」を表示する。
 
+### 採点理由(scoreReason)
+
+Geminiは点数と一緒に、その点数にした理由(`score_reason`)も返す。「どのアプリの何分をドパガキ対象と見たか」「上記(a)(b)(c)のどれが効いたか」を実際の数字を挙げて1〜2文で説明するようプロンプトで指示している。`ai_reviews.score_reason` 列([0015_ai_reviews_score_reason.sql](../supabase/migrations/0015_ai_reviews_score_reason.sql))に保存され、`AiCommentary.scoreReason` として「AIによる講評」カードに `ドパガキ指数 XX%(ラベル)の理由` の見出し付きで表示される。
+
+この列の追加より前に生成された行には理由が無いため `scoreReason` は null 許容で、null のときはカードに理由ブロックを出さない。
+
+---
+
+## ドパガキ対象アプリの判定
+
+どのアプリが「ドパガキ対象」かは**アプリ側では判定せず、Geminiに委ねている**。`ai-review` へ送るのはアプリの表示名・Androidのパッケージ名・利用分数だけで、判定用のフラグは送らない。
+
+以前は `AppCatalog` がパッケージ名の固定表から `isDistracting` を決めてEdge Functionへ送っていたが、表に無いアプリがすべて「対象外」として明示されるため、実際は動画配信やゲームのアプリをGeminiが対象外として扱い、講評がズレる原因になっていた。対象アプリは次々に増えるので固定表では追いつかない、という判断で撤廃した。
+
+その結果:
+
+- `AppCatalog`([app_catalog.dart](../lib/services/app_catalog.dart))の責務は**アプリ別内訳グラフの表示色を引くこと**だけ(`AppCatalog.colorFor(packageName)`)。既知アプリはブランド色、未知アプリはパッケージ名から決定的に生成した色。
+- `AppUsage` に `isDistracting` は無い。`ScreenTimeDay.distractingTotal` も併せて撤廃した(どちらもAIプロンプト以外の利用箇所が無かった)。
+- 代わりにEdge Functionのプロンプトで、ドパガキ対象の定義・学習/音楽/地図/連絡手段などを依存の根拠にしないこと・ブラウザのような用途が定まらないアプリは断定を避けること・判断できないアプリには言及しないこと・内訳に無いアプリを憶測で挙げないこと、を明示している。
+
 ---
 
 ## カード一覧
@@ -185,7 +207,7 @@ Column(
 - 未取得かつ未読込中・エラー無し → 「講評を見る」ボタン。押下で `getOrGenerateCommentary(child)` を呼ぶ
 - 読込中 → `CircularProgressIndicator`
 - 直近の取得が失敗(`commentaryErrorFor(child)` が非null) → エラー文言 + 「再試行」ボタン
-- 取得済み → `summary` 本文 + `adviceList` の箇条書き + 生成時刻(`generatedAt` を `HH:mm 時点の講評` 形式で表示)
+- 取得済み → `summary` 本文 + `scoreReason`(あれば `ドパガキ指数 XX%(ラベル)の理由` 見出し付きのブロック)+ `adviceList` の箇条書き + 生成時刻(`generatedAt` を `HH:mm 時点の講評` 形式で表示)
 
 ---
 
@@ -214,23 +236,26 @@ abstract class AiCommentaryService {
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
+    bool force = false,
   });
 }
 ```
 
 ドパガキ指数もこのサービスが算出する(`AiCommentary.dopagakiIndex`)ため、`dopagakiIndex` は引数に無い。
 
+`force` は「サーバ側に同じ日付の講評が保存済みでも作り直す」フラグ。`ScreenTimeRegistry.refreshScreenTime`(引っ張って更新)を通ったキーだけ `true` になる(`_commentaryNeedsRegenerate`)。これが無いと、スクリーンタイムの同期が終わる前に一度生成された講評が `ai_reviews` に固定され、その日はデータを取り直しても古い数字ベースの講評が返り続けてしまう。
+
 **`SupabaseAiCommentaryService`**([supabase_ai_commentary_service.dart](../lib/services/supabase_ai_commentary_service.dart)) — 実際にGeminiで生成する唯一の実装で、モックへのフォールバックは無い。`ScreenTimeRegistry.aiCommentaryService` の既定値であり、`main.dart` での差し替えは不要(`ActivityService.locationService` と同じ流儀)。
 
-- Supabase Edge Function `ai-review`([supabase/functions/ai-review/index.ts](../supabase/functions/ai-review/index.ts))を `Supabase.instance.client.functions.invoke('ai-review', body: {...})` で呼ぶ。ボディは `child_id`・`date`(YYYY-MM-DD)・`screen_time`(`total_minutes` とアプリ別内訳 `apps: [{name, minutes, is_distracting}]`)
+- Supabase Edge Function `ai-review`([supabase/functions/ai-review/index.ts](../supabase/functions/ai-review/index.ts))を `Supabase.instance.client.functions.invoke('ai-review', body: {...})` で呼ぶ。ボディは `child_id`・`date`(YYYY-MM-DD)・`force`・`screen_time`(`total_minutes` とアプリ別内訳 `apps: [{name, minutes, app_id}]`)
 - Edge Function 側の処理:
   1. 呼び出し元のJWTで対象の子が同じグループのメンバーか検証(profiles_select_group RLSを利用)。親・子どちらから呼んでも同じ検証で通るため、**同じ子の同じ日付なら親子で同一の講評が返る**
-  2. `ai_reviews (child_id, date)` に既存行があれば、Geminiを呼ばずそれを返す(1日1回の生成に固定し、親子で必ず同じ結果になる)
-  3. なければ Gemini Interactions API(`POST https://generativelanguage.googleapis.com/v1beta/interactions`)を呼び、`dopagaki_score`(0-100)・`summary`・`advice: string[]` をJSONスキーマで強制取得
-  4. 取得結果を `ai_reviews` にservice roleで保存(`0008_ai_reviews_advice.sql` で追加した `advice` 列に配列を保存)
+  2. `force` でなく `ai_reviews (child_id, date)` に既存行があれば、Geminiを呼ばずそれを返す(1日1回の生成に固定し、親子で必ず同じ結果になる)
+  3. なければ Gemini Interactions API(`POST https://generativelanguage.googleapis.com/v1beta/interactions`)を呼び、`dopagaki_score`(0-100)・`score_reason`・`summary`・`advice: string[]` をJSONスキーマで強制取得
+  4. 取得結果を `ai_reviews` にservice roleで保存(`0008_ai_reviews_advice.sql` の `advice` 列に配列、`0015_ai_reviews_score_reason.sql` の `score_reason` 列に採点理由)
 - `child.id` が無い(Supabase未連携)・Edge Functionが `gemini_not_configured` を返す(APIキー未設定)・通信エラー・レスポンス形状が想定外、のいずれかの場合は `AiCommentaryException`(`activity-suggest` の `ActivitySuggestException` と同じ形。想定外のレスポンス形状のみ `FormatException`)を投げる。フォールバックはせず、常に実際のAI応答だけを採用する
 - `ScreenTimeRegistry.getOrGenerateCommentary` がこの例外を捕捉し、`commentaryErrorFor(child)` に日本語メッセージを保存する。`AiCommentaryCard` はこれを検知すると講評の代わりにエラー文言と「再試行」ボタンを表示する(`activity_body.dart` の `_notice` と同じ考え方)
-- Geminiへのプロンプト方針: SNS利用の禁止・削減ではなく**適切な距離感での利用を促す**トーン。子どもを断罪しない。ドパガキ指数は単純な比率ではなく「絶対的な利用時間の長さ・一極集中度・総利用時間比」を総合するよう指示している
+- Geminiへのプロンプト方針: SNS利用の禁止・削減ではなく**適切な距離感での利用を促す**トーン。子どもを断罪しない。ドパガキ指数は単純な比率ではなく「絶対的な利用時間の長さ・一極集中度・総利用時間比」を総合するよう指示している。ドパガキ対象アプリの判定もGeminiに委ねている([ドパガキ対象アプリの判定](#ドパガキ対象アプリの判定)参照)。また、渡すのはその日1日分だけなので**前日以前との比較や増減には触れない**よう明示している(週次グラフを見ながら読む保護者にズレて見えるのを避けるため)
 
 呼び出し側(`ScreenTimeRegistry.getOrGenerateCommentary`)は `AiCommentaryService` インターフェースにしか依存していないため、実装の差し替えによる影響範囲は上記2ファイルに収まる。テストは `AiCommentaryService` を実装した独自の `_FakeAiCommentaryService` を代入するため、この例外設計の影響を受けない。
 
@@ -251,6 +276,8 @@ abstract class AiCommentaryService {
 - `setUp` で `ChildRegistry`/`ScreenTimeRegistry` をクリアし、`AppSession.loginAsParent()` + `ChildRegistry.addChild()` でグループと子どもを用意
 - 検証1: 起動直後に「昨日のドパガキ指数」「先日のスクリーンタイム」「AIによる講評」が表示される
 - 検証2: 「講評を見る」タップ後にボタンが消え、講評本文が表示される
+- 検証3: 講評にドパガキ指数の採点理由(`ドパガキ指数 XX%(ラベル)の理由` の見出し + 本文)が表示される
+- 検証4: ドパガキ指数は講評生成前は「未算出」、生成後はAIが返した値になる
 
 **注意**: `FuturisticBackground` は `AnimationController(...)..repeat()` で無限にアニメーションし続けるため、`pumpAndSettle()` は永久にタイムアウトする。テストでは `tester.pump()` + 固定時間の `tester.pump(Duration(...))` を使うこと。
 
@@ -258,8 +285,10 @@ abstract class AiCommentaryService {
 
 ## 既知の制約・今後の課題
 
-- **スクリーンタイム自体はまだモック**。`screen_time_daily`/`screen_time_apps`([db_schema.md](db_schema.md#screen_time_daily--screen_time_apps--スクリーンタイム))を読み書きする実装(`SupabaseScreenTimeService` 等)はまだ無く、`MockScreenTimeService` のダミーデータのみで動作している。AI講評(`ai-review` Edge Function)自体は本物のGemini呼び出しだが、渡している元データはモック。実機のOS API連携時は `ScreenTimeService` を差し替えるだけでよい
-- **`AppUsage.color`/`isDistracting` に対応するDB列が無い**。`screen_time_apps` は `app_id`/`app_label` のみを持つため、実装時はアプリ別の色・「ドパガキ対象アプリか」の判定をクライアント側のカタログ(または別途マスタテーブル)でマッピングする方針を決める必要がある
+- **スクリーンタイムは Android 実機のみ実データ**。`ScreenTimeRegistry.screenTimeService` の既定値は `DeviceScreenTimeService` で、子ども本人が Android 端末でログインしている場合のみ `AndroidScreenTimeService`(`UsageStatsManager` を MethodChannel `com.yellow.yellow_sns_education/screen_time` 経由で呼ぶ)から取得し、その結果を `screen_time_daily`/`screen_time_apps`([db_schema.md](db_schema.md#screen_time_daily--screen_time_apps--スクリーンタイム))へバックグラウンド同期する。保護者(または子ども以外)は `SupabaseScreenTimeService` でそのテーブルを読む。iOS・Web・デスクトップでは(保護者のログイン先が Chrome 等の場合も含めて)`ScreenTimeUnavailableException(unsupportedPlatform)` を投げ、「お使いの端末ではスクリーンタイム参照ができません」を表示する。`MockScreenTimeService` はテスト用の差し替え先として引き続き残っている
+- **`AppUsage.color` に対応するDB列は無い**。`screen_time_apps` は `app_id`/`app_label` のみを持つため、`AppCatalog`(`lib/services/app_catalog.dart`)がパッケージ名から色を決める。既知アプリ(YouTube/TikTok/Instagram等)は固定のブランド色、未知アプリはパッケージ名から決定的に生成した色になる
+- **内訳は「ユーザーが自分で開くアプリ」だけに絞っている**。`UsageStatsManager` はシステムUI・IME・ホームアプリなど裏方のフォアグラウンド時間も返すため、`ScreenTimePlugin.queryDailyUsage` でランチャー用エントリを持たないパッケージ(`getLaunchIntentForPackage` が null)とホームアプリ(`CATEGORY_HOME` の解決先)を除外している。絞らないと総利用時間が膨らみ、AI講評が「一番よく使っているアプリ」としてランチャーを挙げてしまう。副作用として、ランチャーから起動できない特殊なアプリも内訳から落ちる
+- **すでに `ai_reviews` に保存済みの過去日の講評は作り直されない**。`force` は `refreshScreenTime` を通ったキーにしか付かないため、`score_reason` 列の追加より前に生成された行は理由が null のまま残る。その日の講評を作り直したい場合は、ホーム画面で下に引っ張って更新してから「講評を見る」を押す
 - **Edge Functionはリクエストボディのスクリーンタイムをそのまま信頼する**。`ai-review` は呼び出し元が「同じグループのメンバーか」だけを検証しており、送られてきた `screen_time` の値自体が本物かは検証していない。将来的に `screen_time_daily`/`screen_time_apps` から直接読む実装に変えれば、この点は解消される
 - **`purge_old_screen_time()` の自動実行は未設定**([db_schema.md](db_schema.md#未対応今後の課題)と共通)。`ai_reviews` は保持期間の対象外なので、こちらは影響しない
 - **AI講評はモックへのフォールバックを行わない**。`GEMINI_API_KEY` 未設定・通信エラー・Gemini呼び出し失敗時は `AiCommentaryCard` にエラー文言と「再試行」ボタンが出るだけで、講評自体は表示されない。ダミー文言で体験を継続させていた以前の挙動と異なる点に注意

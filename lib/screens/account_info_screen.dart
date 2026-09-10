@@ -5,6 +5,7 @@ import '../services/account_registry.dart';
 import '../services/app_session.dart';
 import '../services/auth_service.dart';
 import '../services/child_registry.dart';
+import '../services/daily_notification_service.dart';
 import '../services/group_registry.dart';
 import '../services/session_bridge.dart';
 import '../widgets/futuristic_background.dart';
@@ -147,6 +148,23 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
         AccountRegistry.instance.updateParentName(email, result);
       }
     }
+  }
+
+  /// 動作確認用: 8時を待たずに、いま自分のロール向けの毎朝の通知を即時発火する。
+  Future<void> _sendTestNotification() async {
+    final isChild = AppSession.instance.isChild;
+    final childNames = ChildRegistry.instance
+        .childrenInGroup(AppSession.instance.groupCode)
+        .map((child) => child.name)
+        .toList();
+    await DailyNotificationService.instance.showNow(
+      isChild: isChild,
+      childNames: childNames,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('通知を送信しました')),
+    );
   }
 
   Future<void> _renameGroup() async {
@@ -331,6 +349,23 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                   ],
                 ),
                 const SizedBox(height: 32),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: _sendTestNotification,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _cyan,
+                      side: BorderSide(color: _cyan.withValues(alpha: 0.6)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.notifications_outlined, size: 18),
+                    label: const Text('通知テスト送信'),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
                   child: OutlinedButton.icon(

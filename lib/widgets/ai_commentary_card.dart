@@ -81,6 +81,14 @@ class AiCommentaryCard extends StatelessWidget {
                   commentary.summary,
                   style: const TextStyle(fontSize: 13, height: 1.5, color: Colors.white),
                 ),
+                if (commentary.scoreReason != null) ...[
+                  const SizedBox(height: 12),
+                  _ScoreReason(
+                    percentage: commentary.dopagakiIndex.percentage,
+                    label: commentary.dopagakiIndex.label,
+                    reason: commentary.scoreReason!,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 ...commentary.adviceList.map(
                   (advice) => Padding(
@@ -111,6 +119,53 @@ class AiCommentaryCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// ドパガキ指数の点数と、AIが挙げたその採点理由。
+class _ScoreReason extends StatelessWidget {
+  final int percentage;
+  final String label;
+  final String reason;
+
+  const _ScoreReason({
+    required this.percentage,
+    required this.label,
+    required this.reason,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'ドパガキ指数 $percentage%($label)の理由',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF33F7FF),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            reason,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.5,
+              color: Colors.white.withValues(alpha: 0.85),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -6,13 +6,14 @@ class AppUsage {
   final Duration duration;
   final Color color;
 
-  /// SNS・動画・ゲームなど「ドパガキ指数」の対象になるアプリかどうか。
-  final bool isDistracting;
+  /// Android のパッケージ名(`screen_time_apps.app_id` に対応)。
+  /// モックデータや旧データには存在しないため null 許容。
+  final String? appId;
 
   const AppUsage({
     required this.appName,
     required this.duration,
     required this.color,
-    required this.isDistracting,
+    this.appId,
   });
 }

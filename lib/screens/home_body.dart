@@ -68,6 +68,8 @@ class _HomeBodyState extends State<HomeBody> {
                 final registry = ScreenTimeRegistry.instance;
                 final days = registry.screenTimeFor(child);
                 final loadingScreenTime = registry.isScreenTimeLoading(child);
+                final screenTimeError = registry.screenTimeErrorFor(child);
+                final needsPermission = registry.screenTimeNeedsPermission(child);
                 final dopagakiIndex = registry.dopagakiIndexFor(child);
 
                 return RefreshIndicator(
@@ -80,7 +82,14 @@ class _HomeBodyState extends State<HomeBody> {
                       children: [
                         DopagakiIndexCard(index: dopagakiIndex, isLoading: loadingScreenTime),
                         const SizedBox(height: 16),
-                        ScreenTimeCard(days: days, isLoading: loadingScreenTime),
+                        ScreenTimeCard(
+                          days: days,
+                          isLoading: loadingScreenTime,
+                          error: screenTimeError,
+                          needsPermission: needsPermission,
+                          onRetry: () => registry.refreshScreenTime(child),
+                          onOpenSettings: () => registry.requestScreenTimePermission(child),
+                        ),
                         const SizedBox(height: 16),
                         AiCommentaryCard(child: child),
                       ],

@@ -6,6 +6,7 @@ import 'screens/auth_gate.dart';
 import 'screens/child_signup_screen.dart';
 import 'screens/missing_config_screen.dart';
 import 'screens/parent_signup_screen.dart';
+import 'services/daily_notification_service.dart';
 import 'supabase_config.dart';
 import 'theme/app_colors.dart';
 
@@ -25,6 +26,9 @@ Future<void> main() async {
     // (ScreenTimeRegistry.aiCommentaryService の既定が SupabaseAiCommentaryService
     // のため、ここでの差し替えは不要)。
   }
+  // 毎朝8時のスクリーンタイム確認通知の初期化。実際のスケジュールは
+  // ログイン後に AuthGate から syncForSession で行う。
+  await DailyNotificationService.instance.init();
   runApp(const YellowSnsEducationApp());
 }
 
