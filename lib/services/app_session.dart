@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/child_profile.dart';
+import '../models/quest_item.dart';
 import '../models/user_role.dart';
 
 export '../models/user_role.dart';
@@ -76,6 +77,18 @@ class AppSession extends ChangeNotifier {
 
   void renameChild(String name) {
     childProfile?.name = name;
+    notifyListeners();
+  }
+
+  /// ログイン中の子どもの `questItems` をサーバから取得した最新の一覧に差し替える。
+  /// [ActivityRealtime] が、親が別端末で承認したアクティビティ由来のタスクを
+  /// 子ども側に反映するために使う。
+  void refreshChildQuests(List<QuestItem> quests) {
+    final profile = childProfile;
+    if (profile == null) return;
+    profile.questItems
+      ..clear()
+      ..addAll(quests);
     notifyListeners();
   }
 }

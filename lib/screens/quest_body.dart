@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/child_profile.dart';
 import '../models/quest_item.dart';
 import '../services/achievement_request_registry.dart';
+import '../services/activity_request_registry.dart';
 import '../services/app_session.dart';
 import '../services/child_notification_registry.dart';
 import '../services/child_registry.dart';
@@ -42,6 +43,7 @@ class _QuestBodyState extends State<QuestBody> {
     AppSession.instance.addListener(_handleRegistryChange);
     AchievementRequestRegistry.instance.addListener(_handleRegistryChange);
     ExchangeRequestRegistry.instance.addListener(_handleRegistryChange);
+    ActivityRequestRegistry.instance.addListener(_handleRegistryChange);
   }
 
   @override
@@ -50,6 +52,7 @@ class _QuestBodyState extends State<QuestBody> {
     AppSession.instance.removeListener(_handleRegistryChange);
     AchievementRequestRegistry.instance.removeListener(_handleRegistryChange);
     ExchangeRequestRegistry.instance.removeListener(_handleRegistryChange);
+    ActivityRequestRegistry.instance.removeListener(_handleRegistryChange);
     super.dispose();
   }
 

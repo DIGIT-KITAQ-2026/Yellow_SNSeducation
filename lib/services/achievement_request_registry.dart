@@ -61,4 +61,11 @@ class AchievementRequestRegistry extends ChangeNotifier {
     );
     notifyListeners();
   }
+
+  /// Drops every cached request. Used on sign-out (前のアカウントの申請が
+  /// 通知ベルに残らないようにする)。
+  void clear() {
+    _requests.clear();
+    notifyListeners();
+  }
 }

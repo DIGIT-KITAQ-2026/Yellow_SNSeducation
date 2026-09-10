@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 周辺アクティビティ提案で、おおよその現在地(市区町村レベル)を取得する。
+         提案の精度には数百m〜数kmの誤差で十分なので FINE は要求しない。 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Supabase / Edge Function への通信。debugビルドでは自動付与されるが、
+         releaseビルドでは明示が必要。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="yellow_sns_education"
         android:name="${applicationName}"

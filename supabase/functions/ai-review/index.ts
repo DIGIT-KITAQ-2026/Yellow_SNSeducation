@@ -12,13 +12,19 @@
 //
 // 必要な環境変数(secrets):
 //   GEMINI_API_KEY (必須)
-//   GEMINI_MODEL   (任意。既定 gemini-3.8-flash)
+//   GEMINI_MODEL   (任意。既定 gemini-3.6-flash。この既定値は
+//                   activity-suggest/index.ts にもハードコードされている
+//                   ため、変更するときは両方のファイルを直すこと)
 // SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY は
 // Edge Function に自動注入される。
+//
+// gemini-3.8-flash は使わないこと。実測(2026-09-09)で、このプロジェクトのキーでは
+// 同モデルだけが応答を返さず45秒でタイムアウトした。3.7-flash / 3.6-flash /
+// 3.5-flash-lite はいずれも数秒で 200 を返す。
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.8-flash";
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-3.6-flash";
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
 interface AppUsageInput {
@@ -232,7 +238,10 @@ async function callGemini(input: {
           required: ["dopagaki_score", "summary", "advice"],
         },
       },
-      generation_config: { max_output_tokens: 800 },
+      // 実測(2026-09-10)で800では途中で切れてJSON.parseが失敗することを確認した
+      // (advice配列の生成中に打ち切られた)。Gemini 3系は思考トークンもこの枠から
+      // 消費するため、score+summary+advice(最大3件)の分量に対して余裕を持たせる。
+      generation_config: { max_output_tokens: 2000 },
     }),
   });
 

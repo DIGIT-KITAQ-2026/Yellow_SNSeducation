@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
 class AppBottomNav extends StatelessWidget {
-  const AppBottomNav({super.key, required this.currentIndex, required this.onTap});
+  const AppBottomNav({
+    super.key,
+    required this.currentIndex,
+    required this.onTap,
+    required this.items,
+  });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
+  final List<BottomNavigationBarItem> items;
 
   @override
   Widget build(BuildContext context) {
@@ -30,15 +36,7 @@ class AppBottomNav extends StatelessWidget {
         elevation: 0,
         selectedItemColor: const Color(0xFF33F7FF),
         unselectedItemColor: Colors.white.withValues(alpha: 0.45),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'ホーム'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt_rounded), label: 'クエスト'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.card_giftcard_rounded),
-            label: 'プレゼント',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.search_rounded), label: '検索'),
-        ],
+        items: items,
       ),
     );
   }

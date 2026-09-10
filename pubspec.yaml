@@ -40,6 +40,9 @@ dependencies:
   # Lets users pick a photo from their device (works on web too).
   image_picker: ^1.1.2
 
+  # 周辺アクティビティ提案で、おおよその現在地を取得する。
+  geolocator: ^13.0.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

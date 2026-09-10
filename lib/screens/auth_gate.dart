@@ -5,6 +5,7 @@ import '../models/gift_item.dart';
 import '../models/quest_item.dart';
 import '../models/signup_draft.dart';
 import '../models/user_profile.dart';
+import '../services/activity_service.dart';
 import '../services/auth_service.dart';
 import '../services/gift_service.dart';
 import '../services/quest_service.dart';
@@ -60,11 +61,15 @@ class _ProfileLoaderState extends State<_ProfileLoader> {
     final pendingExchangeRequests = profile.role == AccountRole.parent
         ? await GiftService.fetchPendingRequests(profile.groupId)
         : const <({String id, String childId, GiftItem item})>[];
+    final pendingActivityRequests = profile.role == AccountRole.parent
+        ? await ActivityService.fetchPendingRequests()
+        : const <PendingActivityRequestRow>[];
     SessionBridge.hydrate(
       profile: profile,
       children: children,
       pendingRequests: pendingRequests,
       pendingExchangeRequests: pendingExchangeRequests,
+      pendingActivityRequests: pendingActivityRequests,
       email: AuthService.currentUser?.email,
     );
     return profile;

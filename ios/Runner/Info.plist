@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>近くで参加できる無料のイベントや過ごし方を探すために、現在地を利用します。</string>
 </dict>
 </plist>

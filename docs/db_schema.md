@@ -4,7 +4,7 @@
 **マイグレーションのSQLが正**であり、このドキュメントはそれを読み解くための資料です。スキーマを変更したら、このドキュメントも合わせて更新してください。
 
 - 対象プロジェクト: `Dokagaki-edu-sns` (ap-northeast-1)
-- 適用済みマイグレーション: `0001` 〜 `0012`
+- 適用済みマイグレーション: `0001` 〜 `0013`
 
 ## 目次
 
@@ -349,18 +349,22 @@ select purge_old_screen_time();
 - AIが0〜100の範囲外を返した場合は**アプリ側でクランプしてから保存**する(check制約で弾かれて保存に失敗するため)
 - 生成・保存は `supabase/functions/ai-review` (Edge Function) が Gemini API を呼んで行う。詳細は [screen_time_ai_commentary.md](screen_time_ai_commentary.md#aicommentaryservice) を参照
 
-### `activity_suggestions` / `activity_requests` — 周辺アクティビティ(将来機能)
+### `activity_suggestions` / `activity_requests` — 周辺アクティビティ提案
 
-READMEの「余裕があれば実装したい機能」向け。テーブルとRPCは先に用意済みで、**アプリ側は未実装**。
+子どもがSNS時間の代わりに参加できる、お金のかからない地域の催しをAIが提案する機能。詳細な仕様は [nearby_activities.md](nearby_activities.md) を参照。
 
 **`activity_suggestions`** … AIが提案したアクティビティ
 
-`id`, `group_id`, `child_id`(提案対象), `title`, `description`, `place_name`, `latitude`, `longitude`, `source_url`, `created_at`
+`id`, `group_id`, `child_id`(提案対象), `title`, `description`, `place_name`, `latitude`, `longitude`, `source_url`, `origin_latitude` / `origin_longitude`(0013で追加。提案を生成したときの子どもの現在地。Edge Function のキャッシュキー), `created_at`
 ※ `tasks` と同様に `(child_id, group_id)` の複合外部キーでグループ整合性を担保
+※ 生成・保存は `supabase/functions/activity-suggest` (Edge Function) が行う。`place_name`/`latitude`/`longitude` は Overpass API(OpenStreetMap)から取得した実在施設と一致した場合のみ実データが入り、一致しない/候補が取れない場合は `latitude`/`longitude` が `null` になる。`source_url` は検索グラウンディングを使わないため常に `null`。詳細は [nearby_activities.md](nearby_activities.md#edge-functionactivity-suggest) を参照。
+  検索グラウンディングは無料枠が無いため使わず(詳細は [nearby_activities.md](nearby_activities.md#edge-functionactivity-suggest) 参照)、
+  `latitude`/`longitude`/`source_url` は常に `null`
 
 **`activity_requests`** … 子から親への「参加したい」申請
 
 `id`, `suggestion_id`(on delete set null), `child_id`, `title` / `description`(スナップショット), `status`, `points`(親が承認時に設定), `created_task_id`(生成された `tasks` へのリンク), `decided_by`, `decided_at`, `requested_at`
+- **部分unique index `(child_id, suggestion_id) where status = 'pending'`**(0013で追加) … 同じ提案への同時申請を防ぐ。却下後は再申請できる(`rejected` は対象外)
 
 ---
 
@@ -378,8 +382,8 @@ READMEの「余裕があれば実装したい機能」向け。テーブルとRP
 | `approve_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql) | `request_id` | 残高再チェック → 台帳に減算行 → 残高減算 → `rewards.always_visible` に応じて `reward_redemptions` 行 or `rewards` 行を削除 |
 | `reject_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql) | `request_id` | 申請を `rejected` に(プレゼント・ポイントとも変化なし = 再申請可能) |
 | `recompute_point_balance` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `target_child_id` | 台帳から残高を再計算して返す(照合用、更新はしない) |
-| `approve_activity_request` | [0006](../supabase/migrations/0006_activities.sql) | `request_id`, `points` | 申請を `approved` → `tasks` を生成 → `created_task_id` にリンク。生成した task id を返す |
-| `reject_activity_request` | [0006](../supabase/migrations/0006_activities.sql) | `request_id` | 申請を `rejected` に |
+| `approve_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)で修正 | `request_id`, `points` | 承認者が対象の子と同じグループの親か検証 → 申請を `approved` → `tasks` を生成 → `created_task_id` にリンク。生成した task id を返す |
+| `reject_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)で修正 | `request_id` | 承認者が対象の子と同じグループの親か検証 → 申請を `rejected` に |
 | `generate_group_code` | [0001](../supabase/migrations/0001_types_and_groups.sql) | — | 未使用の4桁コードを払い出す(内部用) |
 | `screen_time_retention_days` | [0005](../supabase/migrations/0005_screen_time_and_ai.sql) | — | 保持日数を返す。**変更時はここだけ直す** |
 | `purge_old_screen_time` | [0005](../supabase/migrations/0005_screen_time_and_ai.sql) | — | 保持期間より古いスクリーンタイムを削除 |
@@ -394,6 +398,7 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 - 存在しない(既に承認されて削除済みの) `request_id` で承認/却下 → `Task request ... not found` / `Reward request ... not found`
 - 残高不足で `request_reward` / `approve_reward_request` → `Insufficient points: have X, need Y`
 - `points <= 0` で `approve_activity_request` → `points must be positive`
+- 対象の子と同じグループの親以外が `approve_activity_request` / `reject_activity_request` を呼ぶ → `Not authorized to decide activity request ...`
 
 ---
 
@@ -426,6 +431,8 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 | `ai_reviews` | 同一グループ全員 | service role のみ | — | — |
 | `activity_suggestions` | 同一グループ全員 | service role のみ | — | — |
 | `activity_requests` | 子: 自分の分 / 親: グループ内 | 子が自分の分のみ | RPC経由のみ | — |
+
+`activity_requests` は Supabase Realtime にも登録されている([0013](../supabase/migrations/0013_activity_fixes.sql)の `alter publication supabase_realtime add table activity_requests`)。`postgres_changes` は上記の SELECT ポリシーを通った行だけを配信するため、購読側で追加のフィルタは不要。詳細は [nearby_activities.md](nearby_activities.md#realtime) を参照。
 
 ※ `profiles` の UPDATE は本人のみ許可。`point_balance` の変更はトリガで別途禁止しているため、実質 `display_name` / `avatar_url` のみ変更可能。
 
@@ -544,3 +551,6 @@ npx supabase db query --linked "select * from groups;"
 - **グループコードは4桁固定**(1万通り)。総当たりで他人のグループに参加できてしまうリスクがあるため、コードの再生成機能や有効期限を将来検討する余地があります
 - **`profiles` に子のプロフィール削除のフローがない**。子アカウントを抜けさせる操作は未定義です
 - **スクリーンタイム自体は現状クライアント内のモックのみ**。`ScreenTimeService`([lib/services/screen_time_service.dart](../lib/services/screen_time_service.dart))はまだ `screen_time_daily`/`screen_time_apps` を読み書きしていません。一方 `AiCommentaryService` は `SupabaseAiCommentaryService` が `ai-review` Edge Function 経由で実際に `ai_reviews` を読み書きします(モックのスクリーンタイムをリクエストボディで渡す形)。詳細は [screen_time_ai_commentary.md](screen_time_ai_commentary.md) を参照
+- **`approve_task_request` / `approve_reward_request` に承認者の資格チェックが無い**。どちらも `security definer` で RLS を素通りするが、呼び出し元が「対象の子と同じグループの親か」を検証していない(`approve_activity_request` は [0013](../supabase/migrations/0013_activity_fixes.sql) でこの穴を塞いだが、既存の2つは未対応のまま)
+- **`activity_suggestions.origin_latitude`/`origin_longitude` に生の緯度経度を保存し続ける**。個人情報であり保持期間の議論が未整理。`screen_time_daily` のような保持期間管理の仕組み(`purge_old_screen_time` 相当)を将来検討する余地がある
+- **`activity-suggest` Edge Function はリクエストボディの緯度経度をそのまま信頼する**。`ai-review` が `screen_time` を信頼しているのと同じ構造で、呼び出し元が同じグループのメンバーかは検証するが、送られてきた座標自体が本物かは検証していない

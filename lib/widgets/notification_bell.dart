@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../models/achievement_request.dart';
+import '../models/activity_request.dart';
 import '../models/child_notification.dart';
 import '../models/exchange_request.dart';
 import '../services/achievement_request_registry.dart';
+import '../services/activity_request_registry.dart';
 import '../services/app_session.dart';
 import '../services/child_notification_registry.dart';
 import '../services/exchange_request_registry.dart';
 import 'achievement_review_dialog.dart';
+import 'activity_review_dialog.dart';
 import 'exchange_review_dialog.dart';
 
 class NotificationBell extends StatefulWidget {
@@ -23,6 +26,7 @@ class _NotificationBellState extends State<NotificationBell> {
     super.initState();
     AchievementRequestRegistry.instance.addListener(_handleChange);
     ExchangeRequestRegistry.instance.addListener(_handleChange);
+    ActivityRequestRegistry.instance.addListener(_handleChange);
     ChildNotificationRegistry.instance.addListener(_handleChange);
   }
 
@@ -30,6 +34,7 @@ class _NotificationBellState extends State<NotificationBell> {
   void dispose() {
     AchievementRequestRegistry.instance.removeListener(_handleChange);
     ExchangeRequestRegistry.instance.removeListener(_handleChange);
+    ActivityRequestRegistry.instance.removeListener(_handleChange);
     ChildNotificationRegistry.instance.removeListener(_handleChange);
     super.dispose();
   }
@@ -43,6 +48,9 @@ class _NotificationBellState extends State<NotificationBell> {
 
   List<ExchangeRequest> get _exchangeRequests =>
       ExchangeRequestRegistry.instance.requests;
+
+  List<ActivityRequest> get _activityRequests =>
+      ActivityRequestRegistry.instance.requests;
 
   List<ChildNotification> get _childNotifications {
     final childProfile = AppSession.instance.childProfile;
@@ -58,6 +66,7 @@ class _NotificationBellState extends State<NotificationBell> {
         builder: (dialogContext, setDialogState) {
           final achievementRequests = _achievementRequests;
           final exchangeRequests = _exchangeRequests;
+          final activityRequests = _activityRequests;
 
           Future<void> openAchievement(AchievementRequest request) async {
             await showDialog<void>(
@@ -71,6 +80,14 @@ class _NotificationBellState extends State<NotificationBell> {
             await showDialog<void>(
               context: context,
               builder: (_) => ExchangeReviewDialog(request: request),
+            );
+            setDialogState(() {});
+          }
+
+          Future<void> openActivity(ActivityRequest request) async {
+            await showDialog<void>(
+              context: context,
+              builder: (_) => ActivityReviewDialog(request: request),
             );
             setDialogState(() {});
           }
@@ -100,7 +117,9 @@ class _NotificationBellState extends State<NotificationBell> {
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
-                  if (achievementRequests.isEmpty && exchangeRequests.isEmpty)
+                  if (achievementRequests.isEmpty &&
+                      exchangeRequests.isEmpty &&
+                      activityRequests.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       child: Center(
@@ -126,6 +145,14 @@ class _NotificationBellState extends State<NotificationBell> {
                           date: _formatDate(request.createdAt),
                           showCheck: request.stamped,
                           onTap: () => openExchange(request),
+                        ),
+                      ),
+                      ...activityRequests.map(
+                        (request) => _NotificationRow(
+                          title: '${request.childProfile.name}からおでかけ申請をされました。',
+                          date: _formatDate(request.createdAt),
+                          showCheck: request.stamped,
+                          onTap: () => openActivity(request),
                         ),
                       ),
                     ].asMap().entries) ...[
@@ -213,7 +240,8 @@ class _NotificationBellState extends State<NotificationBell> {
     final unreadCount = isChild
         ? _childNotifications.where((n) => !n.read).length
         : _achievementRequests.where((r) => !r.stamped).length +
-            _exchangeRequests.where((r) => !r.stamped).length;
+            _exchangeRequests.where((r) => !r.stamped).length +
+            _activityRequests.where((r) => !r.stamped).length;
     return InkWell(
       onTap: isChild ? _openChildNotifications : _openParentNotifications,
       customBorder: const CircleBorder(),
