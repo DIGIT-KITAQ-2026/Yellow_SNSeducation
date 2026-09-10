@@ -392,65 +392,50 @@ class _ThemePicker extends StatelessWidget {
     final current = ThemeController.instance.kindFor(child);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _ThemeOptionCard(
-                label: 'サイバー',
-                description: '今のネオン系UI',
-                icon: Icons.bolt_rounded,
-                previewColor: AppPalette.cyberpunk.accent,
-                previewBackground: AppPalette.cyberpunk.scaffoldBackground,
-                selected: current == AppThemeKind.cyberpunk,
-                onTap: () => ThemeController.instance.setKind(child, AppThemeKind.cyberpunk),
-                palette: palette,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ThemeOptionCard(
-                label: 'パステル',
-                description: '淡いピンク系UI',
-                icon: Icons.favorite_rounded,
-                previewColor: AppPalette.pastel.accent,
-                previewBackground: AppPalette.pastel.scaffoldBackground,
-                selected: current == AppThemeKind.pastel,
-                onTap: () => ThemeController.instance.setKind(child, AppThemeKind.pastel),
-                palette: palette,
-              ),
-            ),
-          ],
+        _ThemeOptionCard(
+          label: 'ナチュラル',
+          description: 'ゆったり、安心',
+          icon: Icons.eco_rounded,
+          previewColor: AppPalette.natural.accent,
+          previewBackground: AppPalette.natural.scaffoldBackground,
+          selected: current == AppThemeKind.natural,
+          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.natural),
+          palette: palette,
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _ThemeOptionCard(
-                label: 'オーシャン',
-                description: 'すっきり爽やか',
-                icon: Icons.water_drop_rounded,
-                previewColor: AppPalette.ocean.accent,
-                previewBackground: AppPalette.ocean.scaffoldBackground,
-                selected: current == AppThemeKind.ocean,
-                onTap: () => ThemeController.instance.setKind(child, AppThemeKind.ocean),
-                palette: palette,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ThemeOptionCard(
-                label: 'ナチュラル',
-                description: 'ゆったり、安心',
-                icon: Icons.eco_rounded,
-                previewColor: AppPalette.natural.accent,
-                previewBackground: AppPalette.natural.scaffoldBackground,
-                selected: current == AppThemeKind.natural,
-                onTap: () => ThemeController.instance.setKind(child, AppThemeKind.natural),
-                palette: palette,
-              ),
-            ),
-          ],
+        _ThemeOptionCard(
+          label: 'パステル',
+          description: '淡いピンク系UI',
+          icon: Icons.favorite_rounded,
+          previewColor: AppPalette.pastel.accent,
+          previewBackground: AppPalette.pastel.scaffoldBackground,
+          selected: current == AppThemeKind.pastel,
+          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.pastel),
+          palette: palette,
+        ),
+        const SizedBox(height: 12),
+        _ThemeOptionCard(
+          label: 'サイバー',
+          description: '今のネオン系UI',
+          icon: Icons.bolt_rounded,
+          previewColor: AppPalette.cyberpunk.accent,
+          previewBackground: AppPalette.cyberpunk.scaffoldBackground,
+          selected: current == AppThemeKind.cyberpunk,
+          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.cyberpunk),
+          palette: palette,
+        ),
+        const SizedBox(height: 12),
+        _ThemeOptionCard(
+          label: 'オーシャン',
+          description: 'すっきり爽やか',
+          icon: Icons.water_drop_rounded,
+          previewColor: AppPalette.ocean.accent,
+          previewBackground: AppPalette.ocean.scaffoldBackground,
+          selected: current == AppThemeKind.ocean,
+          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.ocean),
+          palette: palette,
         ),
       ],
     );

@@ -285,8 +285,8 @@ class _DopagakiGauge extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 52,
-          height: 52,
+          width: 36,
+          height: 36,
           child: SvgPicture.asset('assets/images/robot/robot_danger.svg'),
         ),
         const SizedBox(width: 8),
@@ -343,8 +343,8 @@ class _DopagakiGauge extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         SizedBox(
-          width: 52,
-          height: 52,
+          width: 36,
+          height: 36,
           child: SvgPicture.asset('assets/images/robot/robot_good.svg'),
         ),
       ],

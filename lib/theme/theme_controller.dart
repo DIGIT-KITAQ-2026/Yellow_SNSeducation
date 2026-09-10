@@ -25,14 +25,14 @@ class ThemeController extends ChangeNotifier {
 
   String _keyFor(ChildProfile child) => child.id ?? '${child.groupCode}/${child.name}';
 
-  AppThemeKind kindFor(ChildProfile child) => _kindByKey[_keyFor(child)] ?? AppThemeKind.cyberpunk;
+  AppThemeKind kindFor(ChildProfile child) => _kindByKey[_keyFor(child)] ?? AppThemeKind.natural;
 
   /// 現在ログイン中のロールに応じたパレット。保護者は常に白基調、
-  /// 子どもは選択済みのテーマ(未選択ならサイバー)。
+  /// 子どもは選択済みのテーマ(未選択ならナチュラル)。
   AppPalette get currentPalette {
     if (!AppSession.instance.isChild) return AppPalette.parentWhite;
     final child = AppSession.instance.childProfile;
-    if (child == null) return AppPalette.cyberpunk;
+    if (child == null) return AppPalette.natural;
     return AppPalette.forKind(kindFor(child));
   }
 

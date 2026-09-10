@@ -108,7 +108,7 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
   }
 }
 
-/// マスコット(仮称「ドパ」)がAI講評を喋っているように見せる吹き出し表示。
+/// マスコット「ロボまる」がAI講評を喋っているように見せる吹き出し表示。
 class _SpeakingCommentary extends StatelessWidget {
   final String summary;
   final List<String> adviceList;
@@ -144,7 +144,7 @@ class _SpeakingCommentary extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'ドパ',
+              'ロボまる',
               style: TextStyle(fontSize: 10, color: palette.textSecondary, fontWeight: FontWeight.w600),
             ),
           ],
