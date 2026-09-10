@@ -85,16 +85,6 @@ class _HomeBodyState extends State<HomeBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          'おかえり、${child.name}!😊',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: palette.textPrimary),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '昨日の記録だよ',
-                          style: TextStyle(fontSize: 13, color: palette.textSecondary),
-                        ),
-                        const SizedBox(height: 16),
                         DopagakiIndexCard(index: dopagakiIndex, isLoading: loadingScreenTime),
                         const SizedBox(height: 16),
                         ScreenTimeCard(days: days, isLoading: loadingScreenTime),

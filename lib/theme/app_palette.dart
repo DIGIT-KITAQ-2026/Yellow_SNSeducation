@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// 子どもが選べるテーマの種類。保護者は常に [AppPalette.parentWhite] になる
-/// ため、ここには含めない。
-enum AppThemeKind { cyberpunk, pastel, ocean, natural }
+/// 選べるテーマの種類。子ども・保護者どちらも同じ選択肢から選べる
+/// (未選択時の既定値は [white])。
+enum AppThemeKind { white, cyberpunk, pastel, natural }
 
 /// 画面全体の配色一式。背景・カード・ナビゲーション・文字色をまとめて持つ。
 ///
@@ -74,12 +74,12 @@ class AppPalette {
 
   static AppPalette forKind(AppThemeKind kind) {
     switch (kind) {
+      case AppThemeKind.white:
+        return parentWhite;
       case AppThemeKind.cyberpunk:
         return cyberpunk;
       case AppThemeKind.pastel:
         return pastel;
-      case AppThemeKind.ocean:
-        return ocean;
       case AppThemeKind.natural:
         return natural;
     }
@@ -141,34 +141,6 @@ class AppPalette {
     inputBorder: Color(0xFFFFD6E8),
   );
 
-  /// 🌊 Ocean: 「すっきり爽やか!」青・水色・白基調。ロボットの水色とも相性がいい。
-  static const ocean = AppPalette(
-    isDark: false,
-    scaffoldBackground: Color(0xFFEAF6FB),
-    backgroundGradient: [Color(0xFFF2FBFF), Color(0xFFDDF1FB), Color(0xFFCCE8FA)],
-    showSkyline: false,
-    surface: Color(0xFFFFFFFF),
-    surfaceAlt: Color(0xFFE1F1FA),
-    cardBorder: Color(0xFFBBDFF0),
-    cardShadow: Color(0xFFA9D7EE),
-    accent: Color(0xFF2E8FD9),
-    accentOn: Colors.white,
-    accentSecondary: Color(0xFF4FC3D9),
-    textPrimary: Color(0xFF16324F),
-    textSecondary: Color(0xFF4E7290),
-    textDisabled: Color(0xFFA9C0D2),
-    danger: Color(0xFFE0545A),
-    warning: Color(0xFFD79B3E),
-    good: Color(0xFF2FA98A),
-    navBackground: Color(0xFFFFFFFF),
-    navBorder: Color(0xFFBBDFF0),
-    navSelected: Color(0xFF2E8FD9),
-    navUnselected: Color(0xFF9DB8CB),
-    dialogBackground: Color(0xFFFFFFFF),
-    inputFill: Color(0xFFEFFAFF),
-    inputBorder: Color(0xFFBBDFF0),
-  );
-
   /// 🌿 Natural: 「ゆったり、安心」緑・クリーム・ベージュ基調。
   static const natural = AppPalette(
     isDark: false,
@@ -197,7 +169,8 @@ class AppPalette {
     inputBorder: Color(0xFFE3D9B8),
   );
 
-  /// 保護者用の落ち着いた白基調テーマ。
+  /// 落ち着いた白基調テーマ。未選択時の既定値であり、保護者・子どもどちらも
+  /// 選べる([AppThemeKind.white])。
   static const parentWhite = AppPalette(
     isDark: false,
     scaffoldBackground: Color(0xFFF7F8FA),

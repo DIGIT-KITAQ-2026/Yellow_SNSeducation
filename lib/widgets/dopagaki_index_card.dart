@@ -9,7 +9,7 @@ import 'info_note_dialog.dart';
 import 'robot_mascot.dart';
 
 const _dopagakiIntro =
-    'スマホでゲームや動画などを楽しむ時間が、どれくらい多いかを表す数字だよ!\n'
+    'スマホの使い方と、勉強・遊び・休憩などの時間のバランスを見るための数字だよ!\n'
     'YouTubeやTikTokを見たり、ゲームをしたりする時間が多いと、'
     'ドパガキ指数が高くなるよ。';
 

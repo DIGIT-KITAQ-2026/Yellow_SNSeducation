@@ -67,6 +67,8 @@ class _MainShellState extends State<MainShell> {
     final child = AppSession.instance.childProfile;
     if (AppSession.instance.isChild && child != null) {
       ThemeController.instance.loadFor(child);
+    } else if (!AppSession.instance.isChild) {
+      ThemeController.instance.loadForParent();
     }
   }
 

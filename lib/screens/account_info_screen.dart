@@ -339,15 +339,13 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                       ...List.generate(4, (_) => _CodeDot(palette: palette)),
                   ],
                 ),
-                if (isChild) ...[
-                  const SizedBox(height: 32),
-                  Text(
-                    '画面のテーマ',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
-                  ),
-                  const SizedBox(height: 8),
-                  _ThemePicker(palette: palette),
-                ],
+                const SizedBox(height: 32),
+                Text(
+                  '画面のテーマ',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
+                ),
+                const SizedBox(height: 8),
+                _ThemePicker(palette: palette),
                 const SizedBox(height: 32),
                 Align(
                   alignment: Alignment.centerRight,
@@ -387,13 +385,33 @@ class _ThemePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isChild = AppSession.instance.isChild;
     final child = AppSession.instance.childProfile;
-    if (child == null) return const SizedBox.shrink();
-    final current = ThemeController.instance.kindFor(child);
+    if (isChild && child == null) return const SizedBox.shrink();
+
+    final current = isChild ? ThemeController.instance.kindFor(child!) : ThemeController.instance.kindForParent();
+    void select(AppThemeKind kind) {
+      if (isChild) {
+        ThemeController.instance.setKind(child!, kind);
+      } else {
+        ThemeController.instance.setKindForParent(kind);
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _ThemeOptionCard(
+          label: 'ホワイト',
+          description: 'シンプルな白基調',
+          icon: Icons.circle_outlined,
+          previewColor: AppPalette.parentWhite.accent,
+          previewBackground: AppPalette.parentWhite.scaffoldBackground,
+          selected: current == AppThemeKind.white,
+          onTap: () => select(AppThemeKind.white),
+          palette: palette,
+        ),
+        const SizedBox(height: 12),
         _ThemeOptionCard(
           label: 'ナチュラル',
           description: 'ゆったり、安心',
@@ -401,7 +419,7 @@ class _ThemePicker extends StatelessWidget {
           previewColor: AppPalette.natural.accent,
           previewBackground: AppPalette.natural.scaffoldBackground,
           selected: current == AppThemeKind.natural,
-          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.natural),
+          onTap: () => select(AppThemeKind.natural),
           palette: palette,
         ),
         const SizedBox(height: 12),
@@ -412,7 +430,7 @@ class _ThemePicker extends StatelessWidget {
           previewColor: AppPalette.pastel.accent,
           previewBackground: AppPalette.pastel.scaffoldBackground,
           selected: current == AppThemeKind.pastel,
-          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.pastel),
+          onTap: () => select(AppThemeKind.pastel),
           palette: palette,
         ),
         const SizedBox(height: 12),
@@ -423,18 +441,7 @@ class _ThemePicker extends StatelessWidget {
           previewColor: AppPalette.cyberpunk.accent,
           previewBackground: AppPalette.cyberpunk.scaffoldBackground,
           selected: current == AppThemeKind.cyberpunk,
-          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.cyberpunk),
-          palette: palette,
-        ),
-        const SizedBox(height: 12),
-        _ThemeOptionCard(
-          label: 'オーシャン',
-          description: 'すっきり爽やか',
-          icon: Icons.water_drop_rounded,
-          previewColor: AppPalette.ocean.accent,
-          previewBackground: AppPalette.ocean.scaffoldBackground,
-          selected: current == AppThemeKind.ocean,
-          onTap: () => ThemeController.instance.setKind(child, AppThemeKind.ocean),
+          onTap: () => select(AppThemeKind.cyberpunk),
           palette: palette,
         ),
       ],
