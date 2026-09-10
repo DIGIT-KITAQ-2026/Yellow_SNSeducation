@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-Future<void> showInfoNoteDialog(BuildContext context, String message) {
+import '../theme/theme_controller.dart';
+
+Future<void> showInfoNoteDialog(BuildContext context, String message, {String title = '注意点'}) {
   return showDialog<void>(
     context: context,
     builder: (_) => Dialog(
@@ -11,10 +13,10 @@ Future<void> showInfoNoteDialog(BuildContext context, String message) {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              '注意点',
+            Text(
+              title,
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 16),
             Text(message, textAlign: TextAlign.center),
@@ -41,6 +43,7 @@ class InfoButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     return InkWell(
       onTap: onTap,
       customBorder: const CircleBorder(),
@@ -50,14 +53,14 @@ class InfoButton extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+          border: Border.all(color: palette.textSecondary),
         ),
         child: Text(
           '？',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: Colors.white.withValues(alpha: 0.7),
+            color: palette.textSecondary,
           ),
         ),
       ),
