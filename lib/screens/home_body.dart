@@ -4,6 +4,7 @@ import '../models/child_profile.dart';
 import '../services/app_session.dart';
 import '../services/child_registry.dart';
 import '../services/screen_time_registry.dart';
+import '../theme/theme_controller.dart';
 import '../widgets/ai_commentary_card.dart';
 import '../widgets/dopagaki_index_card.dart';
 import '../widgets/futuristic_background.dart';
@@ -25,6 +26,7 @@ class _HomeBodyState extends State<HomeBody> {
     ChildRegistry.instance.addListener(_handleChange);
     AppSession.instance.addListener(_handleChange);
     ScreenTimeRegistry.instance.addListener(_handleChange);
+    ThemeController.instance.addListener(_handleChange);
   }
 
   @override
@@ -32,6 +34,7 @@ class _HomeBodyState extends State<HomeBody> {
     ChildRegistry.instance.removeListener(_handleChange);
     AppSession.instance.removeListener(_handleChange);
     ScreenTimeRegistry.instance.removeListener(_handleChange);
+    ThemeController.instance.removeListener(_handleChange);
     super.dispose();
   }
 
@@ -59,11 +62,12 @@ class _HomeBodyState extends State<HomeBody> {
   @override
   Widget build(BuildContext context) {
     final child = _resolveChild();
+    final palette = ThemeController.instance.currentPalette;
 
     return FuturisticBackground(
       child: child == null
-          ? const Center(
-              child: Text('子供が選択されていません', style: TextStyle(color: Colors.white)),
+          ? Center(
+              child: Text('子供が選択されていません', style: TextStyle(color: palette.textPrimary)),
             )
           : Builder(
               builder: (context) {

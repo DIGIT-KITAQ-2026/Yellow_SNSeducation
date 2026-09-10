@@ -8,11 +8,10 @@ import '../services/activity_service.dart';
 import '../services/app_session.dart';
 import '../services/child_notification_registry.dart';
 import '../services/location_service.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
-
-const _cyan = Color(0xFF33F7FF);
-const _magenta = Color(0xFFFF3DAE);
 
 /// 周辺アクティビティ提案画面(子どもタブ専用)。
 ///
@@ -37,12 +36,14 @@ class _ActivityBodyState extends State<ActivityBody> {
     super.initState();
     AppSession.instance.addListener(_handleRegistryChange);
     ActivityRequestRegistry.instance.addListener(_handleRegistryChange);
+    ThemeController.instance.addListener(_handleRegistryChange);
   }
 
   @override
   void dispose() {
     AppSession.instance.removeListener(_handleRegistryChange);
     ActivityRequestRegistry.instance.removeListener(_handleRegistryChange);
+    ThemeController.instance.removeListener(_handleRegistryChange);
     super.dispose();
   }
 
@@ -115,6 +116,8 @@ class _ActivityBodyState extends State<ActivityBody> {
       return const FuturisticBackground(child: SizedBox.shrink());
     }
 
+    final palette = ThemeController.instance.currentPalette;
+
     return FuturisticBackground(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -125,22 +128,22 @@ class _ActivityBodyState extends State<ActivityBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     'SNSの時間のかわりに、近くで無料で楽しめることを探そう',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'AIの提案です。おでかけ前におうちの人と確認してください。',
-                    style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.6)),
+                    style: TextStyle(fontSize: 11, color: palette.textSecondary),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _busy ? null : () => _search(force: _searched),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _cyan,
-                      disabledBackgroundColor: Colors.white.withValues(alpha: 0.15),
-                      foregroundColor: const Color(0xFF0B0A24),
+                      backgroundColor: palette.accent,
+                      disabledBackgroundColor: palette.textDisabled,
+                      foregroundColor: palette.accentOn,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -151,9 +154,9 @@ class _ActivityBodyState extends State<ActivityBody> {
             ),
             const SizedBox(height: 16),
             if (_busy)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent)),
               )
             else if (_notice != null)
               Padding(
@@ -163,14 +166,14 @@ class _ActivityBodyState extends State<ActivityBody> {
                     Text(
                       _notice!,
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+                      style: TextStyle(color: palette.textSecondary),
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton(
                       onPressed: () => _search(),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: _cyan),
+                        foregroundColor: palette.textPrimary,
+                        side: BorderSide(color: palette.accent),
                       ),
                       child: const Text('再試行'),
                     ),
@@ -184,7 +187,7 @@ class _ActivityBodyState extends State<ActivityBody> {
                   child: Text(
                     '近くのアクティビティが見つかりませんでした',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: palette.textDisabled,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -196,6 +199,7 @@ class _ActivityBodyState extends State<ActivityBody> {
                   suggestion: suggestion,
                   pending: ActivityRequestRegistry.instance.hasPendingRequestFor(suggestion.id),
                   onRequest: () => _request(suggestion),
+                  palette: palette,
                 ),
                 const SizedBox(height: 12),
               ],
@@ -211,11 +215,13 @@ class _ActivityCard extends StatefulWidget {
     required this.suggestion,
     required this.pending,
     required this.onRequest,
+    required this.palette,
   });
 
   final ActivitySuggestion suggestion;
   final bool pending;
   final VoidCallback onRequest;
+  final AppPalette palette;
 
   @override
   State<_ActivityCard> createState() => _ActivityCardState();
@@ -226,79 +232,85 @@ class _ActivityCardState extends State<_ActivityCard> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = widget.palette;
     final suggestion = widget.suggestion;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _cyan.withValues(alpha: 0.35)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        suggestion.title,
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-                if (suggestion.placeName != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    suggestion.placeName!,
-                    style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
-                  ),
-                ],
-                if (_expanded) ...[
-                  const SizedBox(height: 12),
-                  Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-                  const SizedBox(height: 12),
-                  Text(
-                    suggestion.detail.isEmpty ? '詳細なし' : suggestion.detail,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-                  ),
-                  if (suggestion.sourceUrl != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      suggestion.sourceUrl!,
-                      style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4)),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton(
-                      onPressed: widget.pending ? null : widget.onRequest,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _magenta,
-                        disabledBackgroundColor: Colors.white.withValues(alpha: 0.15),
-                        foregroundColor: Colors.white,
-                        disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: Text(widget.pending ? '申請中' : '申請する'),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+
+    final content = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: palette.isDark ? Colors.white.withValues(alpha: 0.08) : palette.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.35 : 1)),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  suggestion.title,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
+                ),
+              ),
+            ],
+          ),
+          if (suggestion.placeName != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              suggestion.placeName!,
+              style: TextStyle(fontSize: 12, color: palette.textSecondary),
+            ),
+          ],
+          if (_expanded) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: palette.cardBorder.withValues(alpha: 0.3)),
+            const SizedBox(height: 12),
+            Text(
+              suggestion.detail.isEmpty ? '詳細なし' : suggestion.detail,
+              style: TextStyle(color: palette.textSecondary),
+            ),
+            if (suggestion.sourceUrl != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                suggestion.sourceUrl!,
+                style: TextStyle(fontSize: 11, color: palette.textDisabled),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Divider(height: 1, color: palette.cardBorder.withValues(alpha: 0.3)),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: widget.pending ? null : widget.onRequest,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: palette.accentSecondary,
+                  disabledBackgroundColor: palette.textDisabled,
+                  foregroundColor: Colors.white,
+                  disabledForegroundColor: palette.textSecondary,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: Text(widget.pending ? '申請中' : '申請する'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    final decorated = ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: palette.isDark
+          ? BackdropFilter(filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), child: content)
+          : content,
+    );
+
+    return InkWell(
+      onTap: () => setState(() => _expanded = !_expanded),
+      borderRadius: BorderRadius.circular(12),
+      child: decorated,
     );
   }
 }

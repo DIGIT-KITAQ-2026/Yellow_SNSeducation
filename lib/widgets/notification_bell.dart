@@ -9,6 +9,7 @@ import '../services/activity_request_registry.dart';
 import '../services/app_session.dart';
 import '../services/child_notification_registry.dart';
 import '../services/exchange_request_registry.dart';
+import '../theme/theme_controller.dart';
 import 'achievement_review_dialog.dart';
 import 'activity_review_dialog.dart';
 import 'exchange_review_dialog.dart';
@@ -28,6 +29,7 @@ class _NotificationBellState extends State<NotificationBell> {
     ExchangeRequestRegistry.instance.addListener(_handleChange);
     ActivityRequestRegistry.instance.addListener(_handleChange);
     ChildNotificationRegistry.instance.addListener(_handleChange);
+    ThemeController.instance.addListener(_handleChange);
   }
 
   @override
@@ -36,6 +38,7 @@ class _NotificationBellState extends State<NotificationBell> {
     ExchangeRequestRegistry.instance.removeListener(_handleChange);
     ActivityRequestRegistry.instance.removeListener(_handleChange);
     ChildNotificationRegistry.instance.removeListener(_handleChange);
+    ThemeController.instance.removeListener(_handleChange);
     super.dispose();
   }
 
@@ -236,6 +239,7 @@ class _NotificationBellState extends State<NotificationBell> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     final isChild = AppSession.instance.isChild;
     final unreadCount = isChild
         ? _childNotifications.where((n) => !n.read).length
@@ -251,8 +255,8 @@ class _NotificationBellState extends State<NotificationBell> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            const Center(
-              child: Icon(Icons.notifications_outlined, color: Color(0xFF33F7FF)),
+            Center(
+              child: Icon(Icons.notifications_outlined, color: palette.accent),
             ),
             if (unreadCount > 0)
               Positioned(

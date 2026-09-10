@@ -7,10 +7,10 @@ import '../services/auth_service.dart';
 import '../services/child_registry.dart';
 import '../services/group_registry.dart';
 import '../services/session_bridge.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
-
-const _cyan = Color(0xFF33F7FF);
 
 class AccountInfoScreen extends StatefulWidget {
   const AccountInfoScreen({super.key});
@@ -25,12 +25,14 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     super.initState();
     ChildRegistry.instance.addListener(_handleChange);
     AppSession.instance.addListener(_handleChange);
+    ThemeController.instance.addListener(_handleChange);
   }
 
   @override
   void dispose() {
     ChildRegistry.instance.removeListener(_handleChange);
     AppSession.instance.removeListener(_handleChange);
+    ThemeController.instance.removeListener(_handleChange);
     super.dispose();
   }
 
@@ -51,15 +53,20 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     }
   }
 
-  Future<String?> _showRenameDialog({required String title, required String label, required String initialValue}) {
+  Future<String?> _showRenameDialog({
+    required AppPalette palette,
+    required String title,
+    required String label,
+    required String initialValue,
+  }) {
     final controller = TextEditingController(text: initialValue);
     return showDialog<String>(
       context: context,
       builder: (dialogContext) => Dialog(
-        backgroundColor: const Color(0xFF242428),
+        backgroundColor: palette.dialogBackground,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+          side: BorderSide(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.3 : 1)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -70,23 +77,23 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: palette.textPrimary),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: palette.textPrimary),
                 decoration: InputDecoration(
                   labelText: label,
-                  labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                  labelStyle: TextStyle(color: palette.textSecondary),
                   filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.06),
+                  fillColor: palette.inputFill,
                   enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                    borderSide: BorderSide(color: palette.inputBorder),
                   ),
-                  focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: _cyan, width: 2),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: palette.accent, width: 2),
                   ),
                   border: const OutlineInputBorder(),
                 ),
@@ -98,8 +105,8 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                        foregroundColor: palette.textPrimary,
+                        side: BorderSide(color: palette.inputBorder),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -111,8 +118,8 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                     child: ElevatedButton(
                       onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _cyan,
-                        foregroundColor: const Color(0xFF0B0A24),
+                        backgroundColor: palette.accent,
+                        foregroundColor: palette.accentOn,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -128,11 +135,12 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     );
   }
 
-  Future<void> _renameUser() async {
+  Future<void> _renameUser(AppPalette palette) async {
     final isChild = AppSession.instance.isChild;
     final currentName =
         isChild ? AppSession.instance.childProfile?.name : AppSession.instance.parentName;
     final result = await _showRenameDialog(
+      palette: palette,
       title: 'ユーザー名を変更',
       label: 'ユーザー名',
       initialValue: currentName ?? '',
@@ -149,10 +157,11 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     }
   }
 
-  Future<void> _renameGroup() async {
+  Future<void> _renameGroup(AppPalette palette) async {
     final code = AppSession.instance.groupCode;
     if (code == null) return;
     final result = await _showRenameDialog(
+      palette: palette,
       title: 'グループ名を変更',
       label: 'グループ名',
       initialValue: AppSession.instance.groupName ?? '',
@@ -164,6 +173,7 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     final isChild = AppSession.instance.isChild;
     final myChildName = AppSession.instance.childProfile?.name;
     final displayName = isChild ? myChildName : AppSession.instance.parentName;
@@ -180,9 +190,9 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     ];
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF12103A),
+        backgroundColor: palette.navBackground,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: palette.textPrimary),
       ),
       body: FuturisticBackground(
         child: SafeArea(
@@ -201,11 +211,11 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                           children: [
                             CircleAvatar(
                               radius: 40,
-                              backgroundColor: const Color(0xFF1B1854),
+                              backgroundColor: palette.surfaceAlt,
                               backgroundImage:
                                   avatarBytes != null ? MemoryImage(avatarBytes) : null,
                               child: avatarBytes == null
-                                  ? const Icon(Icons.person_outline, size: 40, color: _cyan)
+                                  ? Icon(Icons.person_outline, size: 40, color: palette.accent)
                                   : null,
                             ),
                             Positioned(
@@ -216,14 +226,14 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                                 height: 24,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: _cyan,
+                                  color: palette.accent,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: const Color(0xFF12103A), width: 2),
+                                  border: Border.all(color: palette.navBackground, width: 2),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.camera_alt,
                                   size: 12,
-                                  color: Color(0xFF0B0A24),
+                                  color: palette.accentOn,
                                 ),
                               ),
                             ),
@@ -237,7 +247,7 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                           Text(
                             displayName ?? 'ユーザー名なし',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
+                              color: palette.textPrimary,
                               fontWeight: FontWeight.w600,
                               fontSize: 16,
                             ),
@@ -245,13 +255,13 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                           const SizedBox(width: 4),
                           InkWell(
                             customBorder: const CircleBorder(),
-                            onTap: _renameUser,
+                            onTap: () => _renameUser(palette),
                             child: Padding(
                               padding: const EdgeInsets.all(4),
                               child: Icon(
                                 Icons.edit_outlined,
                                 size: 16,
-                                color: Colors.white.withValues(alpha: 0.5),
+                                color: palette.textSecondary,
                               ),
                             ),
                           ),
@@ -260,7 +270,7 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                             Text(
                               '<${AppSession.instance.groupName}>',
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.8),
+                                color: palette.textPrimary,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,
                               ),
@@ -269,13 +279,13 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                               const SizedBox(width: 2),
                               InkWell(
                                 customBorder: const CircleBorder(),
-                                onTap: _renameGroup,
+                                onTap: () => _renameGroup(palette),
                                 child: Padding(
                                   padding: const EdgeInsets.all(4),
                                   child: Icon(
                                     Icons.edit_outlined,
                                     size: 14,
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color: palette.textSecondary,
                                   ),
                                 ),
                               ),
@@ -286,15 +296,15 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'メールアドレス未設定',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
+                        style: TextStyle(color: palette.textDisabled, fontSize: 12),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 32),
-                const Text(
+                Text(
                   'あなたのグループメンバー',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
                 ),
                 const SizedBox(height: 8),
                 Align(
@@ -305,9 +315,8 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                       child: Column(
                         children: [
                           for (var i = 0; i < memberRoles.length; i++) ...[
-                            if (i > 0)
-                              Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-                            _MemberRow(role: memberRoles[i]),
+                            if (i > 0) Divider(height: 1, color: palette.cardBorder.withValues(alpha: 0.3)),
+                            _MemberRow(role: memberRoles[i], palette: palette),
                           ],
                         ],
                       ),
@@ -317,19 +326,28 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                 const SizedBox(height: 32),
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       'グループコード',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
                     ),
                     const SizedBox(width: 16),
                     if (AppSession.instance.groupCode != null)
                       ...AppSession.instance.groupCode!
                           .split('')
-                          .map((digit) => _CodeDot(digit: digit))
+                          .map((digit) => _CodeDot(digit: digit, palette: palette))
                     else
-                      ...List.generate(4, (_) => const _CodeDot()),
+                      ...List.generate(4, (_) => _CodeDot(palette: palette)),
                   ],
                 ),
+                if (isChild) ...[
+                  const SizedBox(height: 32),
+                  Text(
+                    '画面のテーマ',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
+                  ),
+                  const SizedBox(height: 8),
+                  _ThemePicker(palette: palette),
+                ],
                 const SizedBox(height: 32),
                 Align(
                   alignment: Alignment.centerRight,
@@ -362,10 +380,128 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
   }
 }
 
+class _ThemePicker extends StatelessWidget {
+  const _ThemePicker({required this.palette});
+
+  final AppPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = AppSession.instance.childProfile;
+    if (child == null) return const SizedBox.shrink();
+    final current = ThemeController.instance.kindFor(child);
+
+    return Row(
+      children: [
+        Expanded(
+          child: _ThemeOptionCard(
+            label: 'サイバー',
+            description: '今のネオン系UI',
+            icon: Icons.bolt_rounded,
+            previewColor: AppPalette.cyberpunk.accent,
+            previewBackground: AppPalette.cyberpunk.scaffoldBackground,
+            selected: current == AppThemeKind.cyberpunk,
+            onTap: () => ThemeController.instance.setKind(child, AppThemeKind.cyberpunk),
+            palette: palette,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _ThemeOptionCard(
+            label: 'パステル',
+            description: '淡いピンク系UI',
+            icon: Icons.favorite_rounded,
+            previewColor: AppPalette.pastel.accent,
+            previewBackground: AppPalette.pastel.scaffoldBackground,
+            selected: current == AppThemeKind.pastel,
+            onTap: () => ThemeController.instance.setKind(child, AppThemeKind.pastel),
+            palette: palette,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ThemeOptionCard extends StatelessWidget {
+  const _ThemeOptionCard({
+    required this.label,
+    required this.description,
+    required this.icon,
+    required this.previewColor,
+    required this.previewBackground,
+    required this.selected,
+    required this.onTap,
+    required this.palette,
+  });
+
+  final String label;
+  final String description;
+  final IconData icon;
+  final Color previewColor;
+  final Color previewBackground;
+  final bool selected;
+  final VoidCallback onTap;
+  final AppPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: previewBackground,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? previewColor : palette.cardBorder.withValues(alpha: 0.3),
+            width: selected ? 2 : 1,
+          ),
+          boxShadow: selected
+              ? [BoxShadow(color: previewColor.withValues(alpha: 0.4), blurRadius: 10)]
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: previewColor, size: 20),
+                const Spacer(),
+                if (selected) Icon(Icons.check_circle, color: previewColor, size: 18),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: previewBackground.computeLuminance() > 0.5 ? Colors.black87 : Colors.white,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 11,
+                color: previewBackground.computeLuminance() > 0.5
+                    ? Colors.black54
+                    : Colors.white60,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MemberRow extends StatelessWidget {
-  const _MemberRow({required this.role});
+  const _MemberRow({required this.role, required this.palette});
 
   final String role;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -373,12 +509,12 @@ class _MemberRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Text(role, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          Text(role, style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary)),
           const SizedBox(width: 8),
           CircleAvatar(
             radius: 14,
-            backgroundColor: const Color(0xFF1B1854),
-            child: const Icon(Icons.person_outline, size: 16, color: _cyan),
+            backgroundColor: palette.surfaceAlt,
+            child: Icon(Icons.person_outline, size: 16, color: palette.accent),
           ),
         ],
       ),
@@ -387,9 +523,10 @@ class _MemberRow extends StatelessWidget {
 }
 
 class _CodeDot extends StatelessWidget {
-  const _CodeDot({this.digit});
+  const _CodeDot({this.digit, required this.palette});
 
   final String? digit;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -400,14 +537,14 @@ class _CodeDot extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: digit != null ? _cyan.withValues(alpha: 0.12) : null,
+        color: digit != null ? palette.accent.withValues(alpha: 0.12) : null,
         border: Border.all(
-          color: digit != null ? _cyan : Colors.white.withValues(alpha: 0.3),
+          color: digit != null ? palette.accent : palette.cardBorder.withValues(alpha: 0.5),
           width: 2,
         ),
       ),
       child: digit != null
-          ? Text(digit!, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white))
+          ? Text(digit!, style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary))
           : null,
     );
   }

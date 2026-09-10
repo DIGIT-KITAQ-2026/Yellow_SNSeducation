@@ -8,14 +8,13 @@ import '../services/child_notification_registry.dart';
 import '../services/child_registry.dart';
 import '../services/exchange_request_registry.dart';
 import '../services/gift_service.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import '../widgets/confirm_delete_dialog.dart';
 import '../widgets/confirm_exchange_dialog.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/new_gift_dialog.dart';
-
-const _cyan = Color(0xFF33F7FF);
-const _magenta = Color(0xFFFF3DAE);
 
 class GiftBody extends StatefulWidget {
   const GiftBody({super.key});
@@ -41,6 +40,7 @@ class _GiftBodyState extends State<GiftBody> {
     AppSession.instance.addListener(_handleRegistryChange);
     AchievementRequestRegistry.instance.addListener(_handleRegistryChange);
     ExchangeRequestRegistry.instance.addListener(_handleRegistryChange);
+    ThemeController.instance.addListener(_handleRegistryChange);
   }
 
   @override
@@ -49,6 +49,7 @@ class _GiftBodyState extends State<GiftBody> {
     AppSession.instance.removeListener(_handleRegistryChange);
     AchievementRequestRegistry.instance.removeListener(_handleRegistryChange);
     ExchangeRequestRegistry.instance.removeListener(_handleRegistryChange);
+    ThemeController.instance.removeListener(_handleRegistryChange);
     super.dispose();
   }
 
@@ -181,6 +182,7 @@ class _GiftBodyState extends State<GiftBody> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     final isChild = AppSession.instance.isChild;
     final profile = _currentProfile;
     return FuturisticBackground(
@@ -189,11 +191,11 @@ class _GiftBodyState extends State<GiftBody> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _PointsCard(points: profile?.points ?? 0),
+            _PointsCard(points: profile?.points ?? 0, palette: palette),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'ご褒美リスト',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
             ),
             const SizedBox(height: 8),
             if (_items.isEmpty)
@@ -203,7 +205,7 @@ class _GiftBodyState extends State<GiftBody> {
                   child: Text(
                     'ご褒美はまだありません',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: palette.textDisabled,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -227,6 +229,7 @@ class _GiftBodyState extends State<GiftBody> {
                       onToggleAlwaysVisible: () => _toggleAlwaysVisible(item),
                       childProfile: isChild ? profile : null,
                       onRequestExchange: () => _requestExchange(item),
+                      palette: palette,
                     ),
                 ],
               ),
@@ -236,6 +239,7 @@ class _GiftBodyState extends State<GiftBody> {
                 alignment: Alignment.centerRight,
                 child: _EditButton(
                   onTap: () => setState(() => _isEditing = !_isEditing),
+                  palette: palette,
                 ),
               ),
               if (_isEditing) ...[
@@ -246,8 +250,8 @@ class _GiftBodyState extends State<GiftBody> {
                       child: OutlinedButton(
                         onPressed: _openNewGiftDialog,
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: _cyan),
+                          foregroundColor: palette.textPrimary,
+                          side: BorderSide(color: palette.accent),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -261,8 +265,8 @@ class _GiftBodyState extends State<GiftBody> {
                       child: ElevatedButton(
                         onPressed: () => setState(() => _isEditing = false),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _cyan,
-                          foregroundColor: const Color(0xFF0B0A24),
+                          backgroundColor: palette.accent,
+                          foregroundColor: palette.accentOn,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -283,9 +287,10 @@ class _GiftBodyState extends State<GiftBody> {
 }
 
 class _EditButton extends StatelessWidget {
-  const _EditButton({required this.onTap});
+  const _EditButton({required this.onTap, required this.palette});
 
   final VoidCallback onTap;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -297,11 +302,11 @@ class _EditButton extends StatelessWidget {
         height: 40,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: _magenta.withValues(alpha: 0.12),
+          color: palette.accentSecondary.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _magenta.withValues(alpha: 0.6)),
+          border: Border.all(color: palette.accentSecondary.withValues(alpha: 0.6)),
         ),
-        child: const Icon(Icons.edit_outlined, size: 20, color: _magenta),
+        child: Icon(Icons.edit_outlined, size: 20, color: palette.accentSecondary),
       ),
     );
   }
@@ -316,6 +321,7 @@ class _GiftItemCard extends StatelessWidget {
     required this.onToggleAlwaysVisible,
     required this.childProfile,
     required this.onRequestExchange,
+    required this.palette,
   });
 
   final GiftItem item;
@@ -325,6 +331,7 @@ class _GiftItemCard extends StatelessWidget {
   final VoidCallback onToggleAlwaysVisible;
   final ChildProfile? childProfile;
   final VoidCallback onRequestExchange;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -350,12 +357,12 @@ class _GiftItemCard extends StatelessWidget {
                       )
                     : Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: palette.isDark ? Colors.white.withValues(alpha: 0.08) : palette.surfaceAlt,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
                           Icons.image_outlined,
-                          color: _cyan.withValues(alpha: 0.6),
+                          color: palette.accent.withValues(alpha: 0.6),
                           size: 16,
                         ),
                       ),
@@ -365,10 +372,10 @@ class _GiftItemCard extends StatelessWidget {
                 item.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 10,
-                  color: Colors.white,
+                  color: palette.textPrimary,
                 ),
               ),
               const SizedBox(height: 2),
@@ -377,7 +384,7 @@ class _GiftItemCard extends StatelessWidget {
                 children: [
                   Text(
                     '${item.points}P',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: _cyan),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: palette.accent),
                   ),
                   InkWell(
                     onTap: isEditing ? onToggleAlwaysVisible : null,
@@ -386,8 +393,8 @@ class _GiftItemCard extends StatelessWidget {
                       item.alwaysVisible ? Icons.push_pin : Icons.push_pin_outlined,
                       size: 12,
                       color: item.alwaysVisible
-                          ? _magenta
-                          : Colors.white.withValues(alpha: isEditing ? 0.4 : 0.2),
+                          ? palette.accentSecondary
+                          : palette.textDisabled.withValues(alpha: isEditing ? 0.8 : 0.4),
                     ),
                   ),
                 ],
@@ -417,7 +424,7 @@ class _GiftItemCard extends StatelessWidget {
                 height: 22,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: palette.isDark ? Colors.white.withValues(alpha: 0.1) : palette.surfaceAlt,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.lightBlueAccent.withValues(alpha: 0.6)),
                 ),
@@ -436,7 +443,7 @@ class _GiftItemCard extends StatelessWidget {
                 height: 22,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: palette.isDark ? Colors.white.withValues(alpha: 0.1) : palette.surfaceAlt,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6)),
                 ),
@@ -455,12 +462,13 @@ class _GiftItemCard extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: (pending || insufficientPoints) ? 0.05 : 0.12),
+                  color: (palette.isDark ? Colors.white : palette.textPrimary)
+                      .withValues(alpha: (pending || insufficientPoints) ? 0.05 : 0.12),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: (pending || insufficientPoints)
-                        ? Colors.white.withValues(alpha: 0.2)
-                        : _magenta.withValues(alpha: 0.7),
+                        ? palette.textDisabled.withValues(alpha: 0.5)
+                        : palette.accentSecondary.withValues(alpha: 0.7),
                   ),
                 ),
                 child: Text(
@@ -469,8 +477,8 @@ class _GiftItemCard extends StatelessWidget {
                     fontSize: 8,
                     fontWeight: FontWeight.bold,
                     color: (pending || insufficientPoints)
-                        ? Colors.white.withValues(alpha: 0.3)
-                        : _magenta,
+                        ? palette.textDisabled
+                        : palette.accentSecondary,
                   ),
                 ),
               ),
@@ -482,18 +490,19 @@ class _GiftItemCard extends StatelessWidget {
 }
 
 class _PointsCard extends StatelessWidget {
-  const _PointsCard({required this.points});
+  const _PointsCard({required this.points, required this.palette});
 
   final int points;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
     return GlassCard(
       child: Row(
         children: [
-          const Text(
+          Text(
             '所持ポイント',
-            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+            style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
           ),
           const Spacer(),
           Container(
@@ -501,16 +510,16 @@ class _PointsCard extends StatelessWidget {
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              border: Border.all(color: _cyan, width: 2),
+              border: Border.all(color: palette.accent, width: 2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '$points',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
             ),
           ),
           const SizedBox(width: 8),
-          const Text('Point', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+          Text('Point', style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary)),
         ],
       ),
     );

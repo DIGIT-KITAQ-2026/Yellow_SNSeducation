@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/dopagaki_index.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import 'glass_card.dart';
 import 'robot_mascot.dart';
 
@@ -17,90 +18,97 @@ class DopagakiIndexCard extends StatelessWidget {
   /// パーセント表記の代わりに「—」を表示する。
   bool get _isUnscored => index.label == '未算出' || index.label == '記録なし';
 
-  Color get _color {
+  Color _colorFor(AppPalette palette) {
     switch (index.label) {
       case '危険':
-        return AppColors.danger;
+        return palette.danger;
       case '注意':
-        return AppColors.warning;
+        return palette.warning;
       case '良好':
-        return AppColors.good;
+        return palette.good;
       default:
-        return Colors.white.withValues(alpha: 0.6);
+        return palette.textSecondary;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return AnimatedBuilder(
+      animation: ThemeController.instance,
+      builder: (context, _) {
+        final palette = ThemeController.instance.currentPalette;
+        final color = _colorFor(palette);
+        return GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '昨日のドパガキ指数',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-                    ),
-                    if (!isLoading) ...[
-                      const SizedBox(height: 4),
-                      Text(index.label, style: TextStyle(fontSize: 12, color: _color)),
-                    ],
-                  ],
-                ),
-              ),
-              if (isLoading)
-                const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else ...[
-                if (!_isUnscored) ...[
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: SvgPicture.asset(robotAssetForPercentage(index.percentage)),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: _color, width: 2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _isUnscored
-                      ? Text(
-                          '—',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _color),
-                        )
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              '${index.percentage}',
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _color),
-                            ),
-                            Text(' %', style: TextStyle(fontSize: 13, color: _color)),
-                          ],
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '昨日のドパガキ指数',
+                          style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
                         ),
-                ),
+                        if (!isLoading) ...[
+                          const SizedBox(height: 4),
+                          Text(index.label, style: TextStyle(fontSize: 12, color: color)),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (isLoading)
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent),
+                    )
+                  else ...[
+                    if (!_isUnscored) ...[
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: SvgPicture.asset(robotAssetForPercentage(index.percentage)),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: color, width: 2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: _isUnscored
+                          ? Text(
+                              '—',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
+                            )
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  '${index.percentage}',
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
+                                ),
+                                Text(' %', style: TextStyle(fontSize: 13, color: color)),
+                              ],
+                            ),
+                    ),
+                  ],
+                ],
+              ),
+              if (!isLoading && !_isUnscored) ...[
+                const SizedBox(height: 16),
+                _DopagakiGauge(percentage: index.percentage, palette: palette),
               ],
             ],
           ),
-          if (!isLoading && !_isUnscored) ...[
-            const SizedBox(height: 16),
-            _DopagakiGauge(percentage: index.percentage),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -108,8 +116,9 @@ class DopagakiIndexCard extends StatelessWidget {
 /// 危険(高い)〜安全(低い)のグラデーションゲージと、両端のロボットキャラクター。
 class _DopagakiGauge extends StatelessWidget {
   final int percentage;
+  final AppPalette palette;
 
-  const _DopagakiGauge({required this.percentage});
+  const _DopagakiGauge({required this.percentage, required this.palette});
 
   @override
   Widget build(BuildContext context) {
@@ -142,8 +151,8 @@ class _DopagakiGauge extends StatelessWidget {
                           margin: const EdgeInsets.symmetric(vertical: 5),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(6),
-                            gradient: const LinearGradient(
-                              colors: [AppColors.danger, AppColors.warning, AppColors.good],
+                            gradient: LinearGradient(
+                              colors: [palette.danger, palette.warning, palette.good],
                             ),
                           ),
                         ),
@@ -168,8 +177,8 @@ class _DopagakiGauge extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('← 危険', style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.6))),
-                  Text('安全 →', style: TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.6))),
+                  Text('← 危険', style: TextStyle(fontSize: 9, color: palette.textSecondary)),
+                  Text('安全 →', style: TextStyle(fontSize: 9, color: palette.textSecondary)),
                 ],
               ),
             ],

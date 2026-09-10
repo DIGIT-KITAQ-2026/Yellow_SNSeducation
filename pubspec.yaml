@@ -46,6 +46,9 @@ dependencies:
   # AI講評カードのロボットマスコット(SVG)表示用。
   flutter_svg: ^2.0.10+1
 
+  # 子どものテーマ選択(サイバー/パステル)を端末に保存する。
+  shared_preferences: ^2.5.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

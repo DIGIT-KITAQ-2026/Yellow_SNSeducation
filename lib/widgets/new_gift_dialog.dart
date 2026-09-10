@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/gift_item.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import '../utils/numeric_input_formatter.dart';
-
-const _cyan = Color(0xFF33F7FF);
-const _panelColor = Color(0xFF1A1740);
 
 class NewGiftDialog extends StatefulWidget {
   const NewGiftDialog({super.key, this.initial});
@@ -63,18 +62,22 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
     );
   }
 
-  InputDecoration _fieldDecoration(String? label, {EdgeInsetsGeometry? contentPadding}) {
+  InputDecoration _fieldDecoration(
+    AppPalette palette,
+    String? label, {
+    EdgeInsetsGeometry? contentPadding,
+  }) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+      labelStyle: TextStyle(color: palette.textSecondary),
       contentPadding: contentPadding,
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.06),
+      fillColor: palette.inputFill,
       enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+        borderSide: BorderSide(color: palette.inputBorder),
       ),
-      focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: _cyan, width: 2),
+      focusedBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: palette.accent, width: 2),
       ),
       border: const OutlineInputBorder(),
     );
@@ -82,11 +85,12 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     return Dialog(
-      backgroundColor: _panelColor,
+      backgroundColor: palette.dialogBackground,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: _cyan.withValues(alpha: 0.4)),
+        side: BorderSide(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.4 : 1)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
@@ -97,7 +101,7 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
             Align(
               alignment: Alignment.topRight,
               child: IconButton(
-                icon: Icon(Icons.close, color: Colors.white.withValues(alpha: 0.7)),
+                icon: Icon(Icons.close, color: palette.textSecondary),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
@@ -107,7 +111,7 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                  ?.copyWith(fontWeight: FontWeight.bold, color: palette.textPrimary),
             ),
             const SizedBox(height: 24),
             if (_imageBytes != null) ...[
@@ -125,24 +129,24 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
             OutlinedButton.icon(
               onPressed: _pickImage,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                foregroundColor: palette.textPrimary,
+                side: BorderSide(color: palette.inputBorder),
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              icon: const Icon(Icons.photo_outlined, color: _cyan),
+              icon: Icon(Icons.photo_outlined, color: palette.accent),
               label: Text(_imageBytes == null ? '写真を選択(任意)' : '写真を変更'),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _titleController,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: palette.textPrimary),
               onChanged: (_) {
                 if (_titleError) setState(() => _titleError = false);
               },
-              decoration: _fieldDecoration('商品名'),
+              decoration: _fieldDecoration(palette, '商品名'),
             ),
             if (_titleError) ...[
               const SizedBox(height: 4),
@@ -154,7 +158,7 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text('設定ポイント', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                Text('設定ポイント', style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary)),
                 const SizedBox(width: 12),
                 SizedBox(
                   width: 56,
@@ -164,15 +168,15 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
                     keyboardType: TextInputType.number,
                     inputFormatters: [NumericInputFormatter()],
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: palette.textPrimary),
                     onChanged: (_) {
                       if (_pointsError) setState(() => _pointsError = false);
                     },
-                    decoration: _fieldDecoration(null, contentPadding: EdgeInsets.zero),
+                    decoration: _fieldDecoration(palette, null, contentPadding: EdgeInsets.zero),
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Text('Ｐ', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                Text('Ｐ', style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary)),
               ],
             ),
             if (_pointsError) ...[
@@ -190,13 +194,13 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
                 children: [
                   Checkbox(
                     value: _alwaysVisible,
-                    activeColor: _cyan,
+                    activeColor: palette.accent,
                     onChanged: (value) => setState(() => _alwaysVisible = value ?? false),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '常に表示する(承認後もリストに残し、繰り返し交換できるようにする)',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: palette.textPrimary),
                     ),
                   ),
                 ],
@@ -206,8 +210,8 @@ class _NewGiftDialogState extends State<NewGiftDialog> {
             ElevatedButton(
               onPressed: _handleSave,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _cyan,
-                foregroundColor: const Color(0xFF0B0A24),
+                backgroundColor: palette.accent,
+                foregroundColor: palette.accentOn,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

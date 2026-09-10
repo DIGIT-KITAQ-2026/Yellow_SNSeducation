@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../screens/account_info_screen.dart';
 import '../services/app_session.dart';
 import '../services/child_registry.dart';
+import '../theme/theme_controller.dart';
 import 'info_note_dialog.dart';
 import 'notification_bell.dart';
 
@@ -19,12 +20,14 @@ class _AccountBarState extends State<AccountBar> {
     super.initState();
     ChildRegistry.instance.addListener(_handleRegistryChange);
     AppSession.instance.addListener(_handleRegistryChange);
+    ThemeController.instance.addListener(_handleRegistryChange);
   }
 
   @override
   void dispose() {
     ChildRegistry.instance.removeListener(_handleRegistryChange);
     AppSession.instance.removeListener(_handleRegistryChange);
+    ThemeController.instance.removeListener(_handleRegistryChange);
     super.dispose();
   }
 
@@ -32,6 +35,7 @@ class _AccountBarState extends State<AccountBar> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     final isChild = AppSession.instance.isChild;
     final children = ChildRegistry.instance.childrenInGroup(AppSession.instance.groupCode);
     final selected = ChildRegistry.instance.selectedInGroup(AppSession.instance.groupCode);
@@ -44,15 +48,16 @@ class _AccountBarState extends State<AccountBar> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF12103A),
-        border: const Border(
-          bottom: BorderSide(color: Color(0xFF33F7FF), width: 1),
-        ),
+        color: palette.navBackground,
+        border: Border(bottom: BorderSide(color: palette.navBorder, width: 1)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF33F7FF).withValues(alpha: 0.25),
-            blurRadius: 12,
-            spreadRadius: -2,
+            color: palette.isDark
+                ? palette.navBorder.withValues(alpha: 0.25)
+                : palette.cardShadow.withValues(alpha: 0.3),
+            blurRadius: palette.isDark ? 12 : 8,
+            spreadRadius: palette.isDark ? -2 : 0,
+            offset: palette.isDark ? Offset.zero : const Offset(0, 2),
           ),
         ],
       ),
@@ -68,27 +73,24 @@ class _AccountBarState extends State<AccountBar> {
                 ),
                 child: CircleAvatar(
                   radius: 18,
-                  backgroundColor: const Color(0xFF1B1854),
+                  backgroundColor: palette.surfaceAlt,
                   backgroundImage: avatarBytes != null ? MemoryImage(avatarBytes) : null,
                   child: avatarBytes == null
-                      ? const Icon(Icons.person_outline, size: 20, color: Color(0xFF33F7FF))
+                      ? Icon(Icons.person_outline, size: 20, color: palette.accent)
                       : null,
                 ),
               ),
               const SizedBox(width: 12),
               Text(
                 displayName ?? 'ユーザー名なし',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: palette.textSecondary, fontWeight: FontWeight.w600),
               ),
               if (AppSession.instance.groupName != null) ...[
                 const SizedBox(width: 6),
                 Text(
                   '<${AppSession.instance.groupName}>',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
+                    color: palette.textSecondary,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -121,8 +123,8 @@ class _AccountBarState extends State<AccountBar> {
             Padding(
               padding: const EdgeInsets.only(left: 48),
               child: Text(
-                '表示中：${selected.name}',
-                style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.5)),
+                '表示中:${selected.name}',
+                style: TextStyle(fontSize: 12, color: palette.textDisabled),
               ),
             ),
           ],
@@ -145,15 +147,16 @@ class _ChildSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     return PopupMenuButton<String>(
       onSelected: onChanged,
       itemBuilder: (context) => children.isEmpty
-          ? const [
+          ? [
               PopupMenuItem<String>(
                 enabled: false,
                 child: Text(
                   '登録された子供がいません',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: palette.textDisabled),
                 ),
               ),
             ]
@@ -163,18 +166,18 @@ class _ChildSwitcher extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: palette.isDark ? Colors.white.withValues(alpha: 0.08) : palette.surfaceAlt,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF33F7FF).withValues(alpha: 0.5)),
+          border: Border.all(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.5 : 1)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               selected ?? '子供を選択',
-              style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+              style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
             ),
-            const Icon(Icons.arrow_drop_down, color: Color(0xFF33F7FF)),
+            Icon(Icons.arrow_drop_down, color: palette.accent),
           ],
         ),
       ),

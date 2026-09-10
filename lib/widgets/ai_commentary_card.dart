@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/child_profile.dart';
 import '../services/screen_time_registry.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import 'glass_card.dart';
 import 'robot_mascot.dart';
 
@@ -30,21 +32,22 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
   Widget build(BuildContext context) {
     final registry = ScreenTimeRegistry.instance;
     return AnimatedBuilder(
-      animation: registry,
+      animation: Listenable.merge([registry, ThemeController.instance]),
       builder: (context, _) {
+        final palette = ThemeController.instance.currentPalette;
         final commentary = registry.commentaryFor(widget.child);
         final loading = registry.isCommentaryLoading(widget.child);
         return GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.auto_awesome, color: Color(0xFFFF3DAE), size: 20),
-                  SizedBox(width: 8),
+                  Icon(Icons.auto_awesome, color: palette.accentSecondary, size: 20),
+                  const SizedBox(width: 8),
                   Text(
                     'AIによる講評',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary, fontSize: 18),
                   ),
                 ],
               ),
@@ -54,8 +57,8 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
                   width: double.infinity,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Color(0xFF33F7FF)),
+                      foregroundColor: palette.textPrimary,
+                      side: BorderSide(color: palette.accent),
                     ),
                     onPressed: () {
                       setState(() => _revealed = true);
@@ -65,9 +68,9 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
                   ),
                 )
               else if (loading || commentary == null)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent)),
                 )
               else
                 _SpeakingCommentary(
@@ -75,6 +78,7 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
                   adviceList: commentary.adviceList,
                   timeLabel: _formatTime(commentary.generatedAt),
                   robotAsset: robotAssetForPercentage(commentary.dopagakiIndex.percentage),
+                  palette: palette,
                 ),
             ],
           ),
@@ -90,12 +94,14 @@ class _SpeakingCommentary extends StatelessWidget {
   final List<String> adviceList;
   final String timeLabel;
   final String robotAsset;
+  final AppPalette palette;
 
   const _SpeakingCommentary({
     required this.summary,
     required this.adviceList,
     required this.timeLabel,
     required this.robotAsset,
+    required this.palette,
   });
 
   @override
@@ -111,15 +117,15 @@ class _SpeakingCommentary extends StatelessWidget {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF33F7FF).withValues(alpha: 0.15),
-                border: Border.all(color: const Color(0xFF33F7FF), width: 1.5),
+                color: palette.accent.withValues(alpha: 0.15),
+                border: Border.all(color: palette.accent, width: 1.5),
               ),
               child: SvgPicture.asset(robotAsset),
             ),
             const SizedBox(height: 4),
             Text(
               'ドパ',
-              style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.7), fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 10, color: palette.textSecondary, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -128,14 +134,18 @@ class _SpeakingCommentary extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: palette.isDark ? Colors.white.withValues(alpha: 0.06) : palette.surfaceAlt,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+              border: Border.all(
+                color: palette.isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : palette.cardBorder.withValues(alpha: 0.6),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(summary, style: const TextStyle(fontSize: 13, height: 1.5, color: Colors.white)),
+                Text(summary, style: TextStyle(fontSize: 13, height: 1.5, color: palette.textPrimary)),
                 const SizedBox(height: 12),
                 ...adviceList.map(
                   (advice) => Padding(
@@ -143,11 +153,11 @@ class _SpeakingCommentary extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('・', style: TextStyle(color: Color(0xFF33F7FF))),
+                        Text('・', style: TextStyle(color: palette.accent)),
                         Expanded(
                           child: Text(
                             advice,
-                            style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+                            style: TextStyle(fontSize: 12, color: palette.textSecondary),
                           ),
                         ),
                       ],
@@ -158,7 +168,7 @@ class _SpeakingCommentary extends StatelessWidget {
                   alignment: Alignment.centerRight,
                   child: Text(
                     timeLabel,
-                    style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.5)),
+                    style: TextStyle(fontSize: 10, color: palette.textDisabled),
                   ),
                 ),
               ],
