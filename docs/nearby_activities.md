@@ -33,7 +33,7 @@ DBスキーマ・RPCの詳細は [db_schema.md](db_schema.md#activity_suggestion
 | 1 | 状態管理は既存の「ChangeNotifierシングルトン + `addListener`/`setState`」に統一する | `ChildRegistry`/`AppSession`/`AchievementRequestRegistry` 等と同じ流儀に揃え、購読方法が画面ごとにばらつかないようにするため |
 | 2 | 「子が申請 → 親が承認」は達成申請・交換申請と同じ形にする | 3つ目の似た機能を作るときに、既存の2例(`AchievementRequestRegistry`/`ExchangeRequestRegistry`)を踏襲すれば実装・レビューの負荷が下がるため |
 | 3 | 位置情報の取得は `LocationService` インターフェース越しに行う | `flutter test` はプラグインを持たないため、テストで差し替えられないとウィジェットテストが書けない。ただし [ScreenTimeService](screen_time_ai_commentary.md) と異なり `lib/` にモック実装は置かず、既定を最初から本実装(`GeolocatorLocationService`)にしている(Chromeの `flutter run -d chrome` は localhost が secure context 扱いなので追加設定なしで動く) |
-| 4 | AIへの実在性の担保は Overpass API(OpenStreetMap)の実データで行い、検索グラウンディングは使わない | 検索グラウンディング(Google検索)は無料枠が無く、429を約0.5秒で即返すと実測で確認した(2026-09-09)。追加課金を避けつつ実在性も担保するため、現在地周辺の実在施設(図書館・公民館・公園など)を無料の Overpass API から取得し、Gemini にはその候補の中からのみ選ばせる。候補が取れない地域では、期間限定イベントを禁止し恒常的な公共施設に絞ったプロンプトにフォールバックする |
+| 4 | AIへの実在性のヒントは Overpass API(OpenStreetMap)の実データで与え、検索グラウンディングは使わない | 検索グラウンディング(Google検索)は無料枠が無く、429を約0.5秒で即返すと実測で確認した(2026-09-09)。追加課金を避けつつ実在性の確率を上げるため、現在地周辺の実在施設(図書館・公民館・公園など)を無料の Overpass API から取得し、Gemini には「参考情報」として渡す。候補地からの選択を強制せず、Geminiが確信のある実在施設名を自身の知識で挙げることも許可する(候補地外の施設名についてはハルシネーションのリスクを許容する設計)。期間限定イベントは候補地の有無によらず一貫して禁止し、恒常的な公共施設に限定する |
 | 5 | 外部APIキーは Edge Function の secret としてのみ持つ | `ai-review` と同じ方針。`.env` は `pubspec.yaml` の assets に含まれアプリに同梱されるため、Flutter側に置くと漏洩する |
 | 6 | 親への通知だけ Supabase Realtime を使う | 達成申請・交換申請は起動時取得のみだが、この機能だけ「親のアプリを開いたままでも申請が届く」体験にする(ユーザー要件)。この機能とそれ以外で通知の即時性が非対称になる点は[既知の制約](#既知の制約今後の課題)を参照 |
 
@@ -110,11 +110,10 @@ Future<void> _search({bool force = false}) async {
 | failure | 状況 | メッセージ |
 |---|---|---|
 | `quotaExceeded` | Gemini APIの無料枠クォータ超過(429 `gemini_quota_exceeded`) | 「AIの提案が今日の上限に達しました。明日またお試しください」 |
-| `rateLimited` | アプリ独自の1日上限超過(429 `rate_limited`) | 「今日の検索回数の上限に達しました。明日またお試しください」 |
 | `notConfigured` | `GEMINI_API_KEY` 未設定(200 `gemini_not_configured`) | 「現在AIの提案は利用できません。おうちの方にお知らせください」 |
 | `failed` | 上記以外(想定外のステータス・レスポンス形状) | 「提案を取得できませんでした。しばらくしてから、もう一度お試しください」 |
 
-判定は必ず body の `error` 値で行い、HTTPステータスだけでは判定しない(`rateLimited` と `quotaExceeded` はどちらも429を返すため)。
+判定は必ず body の `error` 値で行い、HTTPステータスだけでは判定しない(`gemini_not_configured` は200応答でも返るため、ステータスだけでは区別できない)。
 
 各カードは `quest_body.dart` の `_QuestItemBar` と同じ「タップで展開」形式。折りたたみ時はタイトルと場所名のみ、展開時に詳細(`description`)・出典URL(現在は使わない。下記「Edge Function」節を参照)・「申請する」ボタンを表示する。`ActivityRequestRegistry.hasPendingRequestFor(suggestion.id)` が真なら「申請中」にしてボタンを無効化する。
 
@@ -164,38 +163,36 @@ abstract class LocationService {
 
 1. 呼び出し元JWTの anon クライアントで `profiles` から `id, group_id` を取得(取れなければ403)。同一グループのメンバーかの検証であり、`ai-review` と同じ仕組み。`display_name` は取らない(子どもの名前を外部APIに送らないため)
 2. `force` でなければ、直近6時間・半径約2km以内にキャッシュがあればそれを返す(`activity_suggestions.origin_latitude`/`origin_longitude` をキーに使う)
-3. 直近24時間の生成件数が上限(1日4回)を超えたら `{ error: "rate_limited" }` で429
-4. `fetchNearbyPlaces()` が Overpass API(OpenStreetMap)に、現在地半径2km以内の図書館・公民館・児童館・公園・遊び場・運動広場を問い合わせる(下記コラム参照)。失敗・タイムアウト・0件はいずれも空配列を返し、処理は続行する(候補が無い地域向けのフォールバックがあるため)
-5. Gemini Interactions API を呼ぶ。`response_format` で構造化JSON出力を強制する。候補地が取れていれば、その名称・カテゴリ・距離のリストをプロンプトに渡し「この中からだけ選ぶ」よう指示する。Gemini 側が無料枠クォータ超過(429)を返した場合は `GeminiQuotaExceededError` に変換し、`{ error: "gemini_quota_exceeded" }` で429を返す。それ以外のGemini呼び出し失敗は `{ error: "gemini_call_failed", detail }` で502
-6. Geminiの応答をパースしたあと、`place_name` を候補地リストの名称と完全一致で突き合わせる。候補地を渡していたのに一致しない(= リストに無い名前を作った)要素は、その時点で破棄する
-7. サーバ側で `is_free !== true` の要素とタイトル空の要素を機械的に除外し、最大5件に切り詰め、`description` に「確認」の文字が無ければ締め文(下記プロンプト方針を参照)を機械的に追記する
-8. service role で `activity_suggestions` に保存し、`insert().select()` で採番済みの行をそのまま返す
+3. `fetchNearbyPlaces()` が Overpass API(OpenStreetMap)に、現在地半径2km以内の図書館・公民館・児童館・公園・遊び場・運動広場を問い合わせる(下記コラム参照)。失敗・タイムアウト・0件はいずれも空配列を返し、処理は続行する(候補が無い地域向けのフォールバックがあるため)
+4. Gemini Interactions API を呼ぶ。`response_format` で構造化JSON出力を強制する。候補地が取れていれば、その名称・カテゴリ・距離のリストを「参考情報」としてプロンプトに渡す。候補地から選んでもよいし、Geminiが確信のある実在施設名を候補地外から挙げても構わない。Gemini 側が無料枠クォータ超過(429)を返した場合は `GeminiQuotaExceededError` に変換し、`{ error: "gemini_quota_exceeded" }` で429を返す。それ以外のGemini呼び出し失敗は `{ error: "gemini_call_failed", detail }` で502
+5. Geminiの応答をパースしたあと、`place_name` を候補地リストの名称と完全一致で突き合わせる。一致すればその候補地の実在座標を付与するが、一致しなくても要素は破棄しない(座標は `null` のまま採用する)
+6. サーバ側で `is_free !== true` の要素とタイトル空の要素を機械的に除外し、最大5件に切り詰め、`description` に「確認」の文字が無ければ締め文(下記プロンプト方針を参照)を機械的に追記する
+7. service role で `activity_suggestions` に保存し、`insert().select()` で採番済みの行をそのまま返す
 
-**429は2種類ある**(手順3の自前レートリミットと、手順5のGemini側クォータ超過)。どちらもHTTPステータスは429なので、クライアントは必ず body の `error` 値(`rate_limited` か `gemini_quota_exceeded` か)で区別する。`gemini_not_configured`(`GEMINI_API_KEY` 未設定)は例外的にステータス200のまま返る(`ai-review` 側の同種フォールバック判定と挙動を合わせるため)。
+**このEdge Functionが返す429はGemini側のクォータ超過(`gemini_quota_exceeded`)のみ**(旧: アプリ独自のレートリミットもあったが撤廃した。下記「既知の制約」参照)。`gemini_not_configured`(`GEMINI_API_KEY` 未設定)は例外的にステータス200のまま返る(`ai-review` 側の同種フォールバック判定と挙動を合わせるため)。
 
-> **検索グラウンディングを使わず Overpass API(OpenStreetMap)を使う理由**: 2026-09-09の実測で、`tools: [{ type: "google_search" }]` を付けると同一キー・同一モデルで**429を約0.5秒で即返す**と確認した(`response_format` のみなら200)。検索グラウンディングには無料枠が無いと判断した。ただし Gemini の知識だけに頼ると実在性の担保が弱い(下記「候補地なしフォールバック」参照)ため、APIキー・利用登録が不要で完全無料の Overpass API から実在の施設を取得し、Gemini には「この中から選んで遊び方を書く」役割だけを担わせる設計にした。これにより `place_name` と緯度経度は実在データになる。
+> **検索グラウンディングを使わず Overpass API(OpenStreetMap)を使う理由**: 2026-09-09の実測で、`tools: [{ type: "google_search" }]` を付けると同一キー・同一モデルで**429を約0.5秒で即返す**と確認した(`response_format` のみなら200)。検索グラウンディングには無料枠が無いと判断した。ただし Gemini の知識だけに頼ると実在性の確率が下がるため、APIキー・利用登録が不要で完全無料の Overpass API から実在の施設を取得し、Gemini には「参考情報」として渡している。ただし候補地からの選択は強制しておらず、Geminiが確信を持てる実在施設名であれば候補地外から挙げることも許可している(その分、候補地外の施設名についてはハルシネーションのリスクを完全には排除できない設計に変更した)。
 
 ### プロンプト方針
 
 「お金のかからない地域の過ごし方」を最優先とし、図書館・公民館・児童館・公園・自治体主催イベントなど公共性の高い場所を中心に提案するよう指示する。安全性の観点で夜間のみの催し・出会い目的の集まり・年齢制限のある場所などを明示的に除外する。
 
-**候補地(Overpass)がある場合**: プロンプトに「1. ○○図書館(図書館、現在地から約350m)」のような番号付きリストを渡し、`place_name` はこのリストの名称と完全一致する文字列だけを使うよう指示する。手順6のサーバ側チェックが実際の防波堤であり、プロンプト遵守はその一次防御に過ぎない。
+**候補地(Overpass)がある場合**: プロンプトに「1. ○○図書館(図書館、現在地から約350m)」のような番号付きリストを「参考情報」として渡す。選んでもよいし、他に知っている実在の施設があれば具体的に挙げてもよいと明示する。
 
-**候補地が取れなかった場合のフォールバック**: Overpass にデータが少ない地域(郊外・地方など)では候補地が0件になりうる。この場合は検索グラウンディング撤去時点の設計に戻り、実在性の担保をプロンプト設計だけで行う:
-
-- **期間限定のイベント・お祭り・ワークショップは提案させない。** 一年を通していつでも行ける公共施設だけに限定する
-- 具体的な開催日時・料金・電話番号・URL・アクセス方法は書かせない
-- `place_name` は固有名詞に確信が持てない場合、「お近くの市立図書館」のように種類がわかる一般的な書き方にさせる
+**候補地が取れなかった場合**: Overpass にデータが少ない地域(郊外・地方など)では候補地が0件になりうる。この場合も具体的な施設名を挙げること自体は禁止しない。
 
 両方のケースに共通する指示:
 
+- `place_name` は、施設名に確信がある場合は具体的な名前を挙げてよい。確信が持てない場合は無理に固有名詞を作らず、「お近くの市立図書館」のように種類がわかる一般的な書き方にさせる(候補地の有無で分岐させず、確信の度合いだけを判断基準にする)
+- **期間限定のイベント・お祭り・ワークショップは提案させない。** 一年を通していつでも行ける公共施設だけに限定する
+- 具体的な開催日時・料金・電話番号・URL・アクセス方法は書かせない
 - `title` は場所名ではなく「そこで何ができるか」を具体化した見出しにさせる(例:「図書館で世界の絵本さがし」)。場所を一般化する代わりに過ごし方を具体的にすることで、機能の価値(SNSの代わりになる提案)を保つ
 - `description` の末尾に必ず「場所や開いている時間は、おでかけの前におうちの人と確認してください。」を添えさせる。プロンプト遵守だけに頼らず、手順7のサーバ側フィルタでも機械的に保証する
-- 実在しない場所を作らないことを最優先とし、5件に届かなくてもよいと明示する(`callGemini` は0件の応答をエラーにしない。プロンプトで許容している以上、あるいは手順6で全件破棄された場合も含めて、0件は正当な結果であり502にしてはならない)
+- 実在しない場所を作らないことを最優先とし、5件に届かなくてもよいと明示する(`callGemini` は0件の応答をエラーにしない。プロンプトで許容している以上、0件は正当な結果であり502にしてはならない)
 
 ### `source_url` / `latitude` / `longitude` の扱い
 
-`latitude`/`longitude` は、Overpass候補と一致した提案には**実在の座標**が入るようになった(手順6の突き合わせ結果)。候補地が無い/一致しなかった場合は引き続き `null`(モデルの自己申告は捏造されうるため、突き合わせできない座標を保存することはしない)。`source_url` は検索グラウンディングを使わないため出典URLが取得できず、常に `null` のまま。カラム自体と `ActivitySuggestion.sourceUrl`・`activity_body.dart` の表示分岐は、将来グラウンディングを復活させたときのために残置している。
+`latitude`/`longitude` は、Overpass候補と名称が一致した提案には**実在の座標**が入る(手順6の突き合わせ結果)。候補地が無い/一致しなかった場合は引き続き `null`(モデルの自己申告は捏造されうるため、突き合わせできない座標を保存することはしない)。座標が無くても提案自体は破棄されない。`source_url` は検索グラウンディングを使わないため出典URLが取得できず、常に `null` のまま。カラム自体と `ActivitySuggestion.sourceUrl`・`activity_body.dart` の表示分岐は、将来グラウンディングを復活させたときのために残置している。
 
 ---
 
@@ -250,7 +247,7 @@ abstract class LocationService {
 
 `ActivityService`/`ActivityRequestRegistry` は Supabase を直接叩くため、`fetchSuggestions`/`requestActivity` を実際に呼ぶ操作までは踏み込まない(`home_body_test.dart` と同じ割り切り)。
 
-`test/services/activity_service_test.dart` — `ActivitySuggestException.fromFunctionException`/`fromErrorCode`(`FunctionException.details` から `ActivitySuggestFailure` への変換ロジック)のみを対象にした純粋関数テスト。Supabase の初期化は不要。`gemini_quota_exceeded`/`rate_limited`/`gemini_not_configured`/`error`キー無し/未知の`error`値/`details`がMapでない/`details`がnull、の各ケースを検証する。
+`test/services/activity_service_test.dart` — `ActivitySuggestException.fromFunctionException`/`fromErrorCode`(`FunctionException.details` から `ActivitySuggestFailure` への変換ロジック)のみを対象にした純粋関数テスト。Supabase の初期化は不要。`gemini_quota_exceeded`/`gemini_not_configured`/`error`キー無し/未知の`error`値/`details`がMapでない/`details`がnull、の各ケースを検証する。
 
 ---
 
@@ -259,7 +256,9 @@ abstract class LocationService {
 - **通知の即時性がこの機能だけ非対称**。達成申請・交換申請は起動時取得のみだが、アクティビティ申請だけ Realtime で即時に届く。将来揃えるなら、同じ購読を `task_requests`/`reward_redemptions` にも広げる必要がある
 - **子は承認に気づかない**。`ChildNotificationRegistry` はメモリのみで、承認処理自体は親の端末で走るため、子端末の Realtime 購読(クエスト再取得)以外に知らせる手段が無い
 - **`activity-suggest` はリクエストボディの緯度経度をそのまま信頼する**。`ai-review` が `screen_time` を信頼しているのと同じ構造。子が任意の座標を送れるが、被害は「無関係な地域の提案が出る」程度
-- **Overpass(OpenStreetMap)のデータ網羅性に依存する**。都市部は候補が豊富だが、地方・郊外では候補地が0件になりやすく、その場合は従来通りモデルの知識に依存したフォールバック(一般的な場所名)になる
+- **Overpass(OpenStreetMap)のデータ網羅性に依存する**。都市部は候補が豊富だが、地方・郊外では候補地が0件になりやすく、その場合は従来通りモデルの知識に依存したフォールバック(一般的な場所名、または確信があれば具体的な施設名)になる
+- **候補地リストに無い施設名をGeminiが挙げた場合、実在性を機械的には保証できない**。候補地からの選択を強制しない設計にしたため(具体的な施設名を挙げられるようにする方が提案の価値が高いと判断)、ハルシネーション(実在しない施設の捏造)のリスクを許容している。安全網は「おでかけ前におうちの人と確認してください」という画面上部の注意書きと `description` 末尾の一文のみ
 - **Overpass API は外部の無料公開サービスであり、SLAが無い**。利用が集中する時間帯は応答が遅い/失敗することがある。呼び出しは8秒でタイムアウトさせ、失敗時は空配列にフォールバックするため機能全体は止まらないが、実在の場所を提示できる確率は下がる
 - **`activity_suggestions.origin_latitude`/`origin_longitude` の保持期間が未整理**。緯度経度は個人情報であり、`screen_time_daily` のような保持期間管理の仕組み(`purge_old_screen_time` 相当)を将来検討する余地がある
 - **Chrome デスクトップの測位精度は粗い**。GPSが無いためWi-Fi/IP測位になり、数km〜ISPの所在地レベルまでずれることがある
+- **アプリ独自のレートリミット(旧: 直近24時間に保存された行数が20件を超えたら429)は撤廃した**。1回の検索で最大5行保存されるため実質4回/日でブロックされてしまうバグがあり(2026-09-10発覚)、原因の複雑さに見合う価値が無いと判断して仕組みごと削除した。連打・コストの歯止めは、検索中はボタンを無効化する `ActivityBody._busy`、6時間/半径2kmのキャッシュ、Gemini無料枠自体のクォータ(`gemini_quota_exceeded`)の3点に委ねている

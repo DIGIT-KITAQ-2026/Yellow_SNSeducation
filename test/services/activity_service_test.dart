@@ -12,13 +12,6 @@ void main() {
       expect(e.failure, ActivitySuggestFailure.quotaExceeded);
     });
 
-    test('rate_limited を rateLimited にマップする', () {
-      final e = ActivitySuggestException.fromFunctionException(
-        const FunctionException(status: 429, details: {'error': 'rate_limited'}),
-      );
-      expect(e.failure, ActivitySuggestFailure.rateLimited);
-    });
-
     test('gemini_not_configured を notConfigured にマップする', () {
       final e = ActivitySuggestException.fromFunctionException(
         const FunctionException(status: 200, details: {'error': 'gemini_not_configured'}),

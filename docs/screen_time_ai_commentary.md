@@ -47,7 +47,8 @@ lib/
     ai_commentary.dart      # AI講評(summary, adviceList, generatedAt)
   services/
     screen_time_service.dart      # ScreenTimeService(抽象) + MockScreenTimeService
-    ai_commentary_service.dart    # AiCommentaryService(抽象) + MockAiCommentaryService
+    ai_commentary_service.dart    # AiCommentaryService(抽象)
+    supabase_ai_commentary_service.dart  # 唯一の実装(Gemini呼び出し) + AiCommentaryException
     dopagaki_calculator.dart      # ScreenTimeDay → DopagakiIndex
     screen_time_registry.dart     # 状態管理のシングルトン
   widgets/
@@ -123,9 +124,10 @@ Column(
 
 | メンバー | 役割 |
 |---|---|
-| `screenTimeService` / `aiCommentaryService` | 差し替え可能なサービス実装。既定値は各 `Mock*Service` |
+| `screenTimeService` / `aiCommentaryService` | 差し替え可能なサービス実装。既定値は `screenTimeService` が `MockScreenTimeService`、`aiCommentaryService` が本番実装の `SupabaseAiCommentaryService`(モックへのフォールバックは無い) |
 | `screenTimeFor(child)` / `isScreenTimeLoading(child)` | キャッシュ済みのスクリーンタイムと読み込み中フラグ |
 | `commentaryFor(child)` / `isCommentaryLoading(child)` | キャッシュ済みのAI講評と読み込み中フラグ |
+| `commentaryErrorFor(child)` | 直近の `getOrGenerateCommentary` が失敗した場合の日本語メッセージ。成功時・未リクエスト時は `null` |
 | `ensureScreenTimeLoaded(child)` | 未取得なら `screenTimeService.fetchRecentScreenTime` を呼び、結果をキャッシュ |
 | `refreshScreenTime(child)` | キャッシュ(スクリーンタイム・AI講評とも)を破棄して再取得 |
 | `dopagakiIndexFor(child)` | キャッシュ済みのAI講評があればその `dopagakiIndex`。無ければスクリーンタイム未取得時は `DopagakiIndex.empty`、取得済みだが講評未生成なら `DopagakiIndex.notGenerated`(「未算出」) |
@@ -150,7 +152,7 @@ Column(
 - `30 <= percentage < 60` → `注意`
 - `percentage >= 60` → `危険`
 
-`DopagakiCalculator.calculate(ScreenTimeDay)`(比率ベースの計算)は `MockAiCommentaryService` のフォールバック用に残っている。
+`DopagakiCalculator` に残るのは `labelFor(percentage)`(しきい値によるラベル付け)のみで、AIが返したスコアのラベル付けに使う。
 
 `ScreenTimeRegistry.dopagakiIndexFor` は、講評未生成の間は `DopagakiIndex.notGenerated`(「未算出」)を返す。「昨日のドパガキ指数」カード([dopagaki_index_card.dart](../lib/widgets/dopagaki_index_card.dart))はこのとき数値の代わりに「—」を表示する。
 
@@ -180,8 +182,9 @@ Column(
 
 [ai_commentary_card.dart](../lib/widgets/ai_commentary_card.dart)。`child: ChildProfile` を受け取り、`ScreenTimeRegistry.instance` を `AnimatedBuilder` で購読する。
 
-- 未取得かつ未読込中 → 「講評を見る」ボタン。押下で `getOrGenerateCommentary(child)` を呼ぶ
+- 未取得かつ未読込中・エラー無し → 「講評を見る」ボタン。押下で `getOrGenerateCommentary(child)` を呼ぶ
 - 読込中 → `CircularProgressIndicator`
+- 直近の取得が失敗(`commentaryErrorFor(child)` が非null) → エラー文言 + 「再試行」ボタン
 - 取得済み → `summary` 本文 + `adviceList` の箇条書き + 生成時刻(`generatedAt` を `HH:mm 時点の講評` 形式で表示)
 
 ---
@@ -217,9 +220,7 @@ abstract class AiCommentaryService {
 
 ドパガキ指数もこのサービスが算出する(`AiCommentary.dopagakiIndex`)ため、`dopagakiIndex` は引数に無い。
 
-**`MockAiCommentaryService`** — 内部で `DopagakiCalculator.calculate(screenTime)` を呼んで指数を計算し、そのラベル(`危険`/`注意`/`記録なし`/それ以外)で分岐するルールベースの文章を生成する。実際のAI API呼び出しは行わない。800msのダミー遅延あり。開発時の既定実装、および下記フォールバック先として使われる。
-
-**`SupabaseAiCommentaryService`**([supabase_ai_commentary_service.dart](../lib/services/supabase_ai_commentary_service.dart)) — 実際にGeminiで生成する本番実装。`main.dart` で `SupabaseConfig.isConfigured` の場合にのみ `ScreenTimeRegistry.instance.aiCommentaryService` に設定される。
+**`SupabaseAiCommentaryService`**([supabase_ai_commentary_service.dart](../lib/services/supabase_ai_commentary_service.dart)) — 実際にGeminiで生成する唯一の実装で、モックへのフォールバックは無い。`ScreenTimeRegistry.aiCommentaryService` の既定値であり、`main.dart` での差し替えは不要(`ActivityService.locationService` と同じ流儀)。
 
 - Supabase Edge Function `ai-review`([supabase/functions/ai-review/index.ts](../supabase/functions/ai-review/index.ts))を `Supabase.instance.client.functions.invoke('ai-review', body: {...})` で呼ぶ。ボディは `child_id`・`date`(YYYY-MM-DD)・`screen_time`(`total_minutes` とアプリ別内訳 `apps: [{name, minutes, is_distracting}]`)
 - Edge Function 側の処理:
@@ -227,10 +228,11 @@ abstract class AiCommentaryService {
   2. `ai_reviews (child_id, date)` に既存行があれば、Geminiを呼ばずそれを返す(1日1回の生成に固定し、親子で必ず同じ結果になる)
   3. なければ Gemini Interactions API(`POST https://generativelanguage.googleapis.com/v1beta/interactions`)を呼び、`dopagaki_score`(0-100)・`summary`・`advice: string[]` をJSONスキーマで強制取得
   4. 取得結果を `ai_reviews` にservice roleで保存(`0008_ai_reviews_advice.sql` で追加した `advice` 列に配列を保存)
-- `child.id` が無い(Supabase未連携)・Edge Functionが `gemini_not_configured` を返す(APIキー未設定)・通信エラー・レスポンス形状が想定外、のいずれかの場合は内部で `MockAiCommentaryService` にフォールバックする
+- `child.id` が無い(Supabase未連携)・Edge Functionが `gemini_not_configured` を返す(APIキー未設定)・通信エラー・レスポンス形状が想定外、のいずれかの場合は `AiCommentaryException`(`activity-suggest` の `ActivitySuggestException` と同じ形。想定外のレスポンス形状のみ `FormatException`)を投げる。フォールバックはせず、常に実際のAI応答だけを採用する
+- `ScreenTimeRegistry.getOrGenerateCommentary` がこの例外を捕捉し、`commentaryErrorFor(child)` に日本語メッセージを保存する。`AiCommentaryCard` はこれを検知すると講評の代わりにエラー文言と「再試行」ボタンを表示する(`activity_body.dart` の `_notice` と同じ考え方)
 - Geminiへのプロンプト方針: SNS利用の禁止・削減ではなく**適切な距離感での利用を促す**トーン。子どもを断罪しない。ドパガキ指数は単純な比率ではなく「絶対的な利用時間の長さ・一極集中度・総利用時間比」を総合するよう指示している
 
-呼び出し側(`ScreenTimeRegistry.getOrGenerateCommentary`)は `AiCommentaryService` インターフェースにしか依存していないため、実装の差し替えによる影響範囲は上記2ファイルに収まる。
+呼び出し側(`ScreenTimeRegistry.getOrGenerateCommentary`)は `AiCommentaryService` インターフェースにしか依存していないため、実装の差し替えによる影響範囲は上記2ファイルに収まる。テストは `AiCommentaryService` を実装した独自の `_FakeAiCommentaryService` を代入するため、この例外設計の影響を受けない。
 
 ---
 
@@ -260,3 +262,4 @@ abstract class AiCommentaryService {
 - **`AppUsage.color`/`isDistracting` に対応するDB列が無い**。`screen_time_apps` は `app_id`/`app_label` のみを持つため、実装時はアプリ別の色・「ドパガキ対象アプリか」の判定をクライアント側のカタログ(または別途マスタテーブル)でマッピングする方針を決める必要がある
 - **Edge Functionはリクエストボディのスクリーンタイムをそのまま信頼する**。`ai-review` は呼び出し元が「同じグループのメンバーか」だけを検証しており、送られてきた `screen_time` の値自体が本物かは検証していない。将来的に `screen_time_daily`/`screen_time_apps` から直接読む実装に変えれば、この点は解消される
 - **`purge_old_screen_time()` の自動実行は未設定**([db_schema.md](db_schema.md#未対応今後の課題)と共通)。`ai_reviews` は保持期間の対象外なので、こちらは影響しない
+- **AI講評はモックへのフォールバックを行わない**。`GEMINI_API_KEY` 未設定・通信エラー・Gemini呼び出し失敗時は `AiCommentaryCard` にエラー文言と「再試行」ボタンが出るだけで、講評自体は表示されない。ダミー文言で体験を継続させていた以前の挙動と異なる点に注意

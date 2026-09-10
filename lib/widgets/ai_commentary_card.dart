@@ -37,6 +37,7 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
         final palette = ThemeController.instance.currentPalette;
         final commentary = registry.commentaryFor(widget.child);
         final loading = registry.isCommentaryLoading(widget.child);
+        final error = registry.commentaryErrorFor(widget.child);
         return GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -67,12 +68,31 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
                     child: const Text('講評を見る'),
                   ),
                 )
-              else if (loading || commentary == null)
+              else if (loading)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent)),
                 )
-              else
+              else if (error != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      error,
+                      style: TextStyle(fontSize: 12, color: palette.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: palette.textPrimary,
+                        side: BorderSide(color: palette.accent),
+                      ),
+                      onPressed: () => registry.getOrGenerateCommentary(widget.child),
+                      child: const Text('再試行'),
+                    ),
+                  ],
+                )
+              else if (commentary != null)
                 _SpeakingCommentary(
                   summary: commentary.summary,
                   adviceList: commentary.adviceList,

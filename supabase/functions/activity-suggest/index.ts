@@ -5,9 +5,12 @@
 // キーでは google_search ツールを付けると無料枠が無く429を即返すと確認した
 // (response_format のみなら200)。追加課金を避けるため、実在の場所候補は
 // Overpass API(OpenStreetMap。APIキー不要・無料・利用登録不要)から取得し、
-// Gemini にはその候補の中から選んで遊び方を書かせるだけにする。これにより
-// place_name / 緯度経度は実在データになり、Geminiが施設名を捏造するリスクを
-// 構造的に排除できる(下記 fetchNearbyPlaces / callGemini 参照)。
+// Gemini には「参考情報」として渡す。Gemini は候補の中から選んでもよいし、
+// 自身の知識で確信のある実在施設名を具体的に挙げてもよい(候補地との完全
+// 一致は強制しない)。これにより具体的で魅力的な提案がしやすくなる一方、
+// 候補外の施設名についてはハルシネーション(捏造)のリスクを完全には排除
+// できない点は許容している。候補地と名称が一致した提案だけは、実在の
+// 緯度経度を付与する(下記 fetchNearbyPlaces / callGemini 参照)。
 //
 // クライアント(Flutter)は anon キー(呼び出し元のJWT付き)でこの関数を呼ぶ。
 // activity_suggestions への書き込みは service role の責務なので(db_schema.md 参照)、
@@ -36,8 +39,6 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const MAX_ITEMS = 5;
 const CACHE_TTL_HOURS = 6;
 const CACHE_RADIUS_DEG = 0.02; // 約2km。少し移動しただけでは再生成しない
-const RATE_LIMIT_WINDOW_HOURS = 24;
-const RATE_LIMIT_MAX_GENERATIONS = MAX_ITEMS * 4; // 1日4回の生成まで
 
 interface RequestBody {
   child_id: string;
@@ -51,9 +52,9 @@ interface GeminiActivity {
   description: string;
   place_name: string;
   is_free: boolean;
-  // Overpass候補との突き合わせで得られた実在座標。候補が無い/一致しなかった
-  // 場合は null(callGemini内でその活動自体を捨てるのは候補ありのときだけ。
-  // 候補なしフォールバック時は null のまま許可する。下記callGemini参照)。
+  // Overpass候補との名称一致で得られた実在座標。候補が無い/一致しなかった
+  // 場合は null(座標を捏造しないため。一致しなくても活動自体は破棄しない。
+  // 下記callGemini参照)。
   latitude: number | null;
   longitude: number | null;
 }
@@ -67,10 +68,7 @@ interface PlaceCandidate {
   distanceM: number;
 }
 
-// Gemini 側の無料枠クォータ超過 (429)。自前のレートリミット (下の
-// RATE_LIMIT_MAX_GENERATIONS) も 429 を返すため、クライアントは HTTP ステータス
-// だけでなく body の `error` 値 ("gemini_quota_exceeded" か "rate_limited" か) で
-// 区別する必要がある。
+// Gemini 側の無料枠クォータ超過 (429)。このEdge Functionが返す429はこれのみ。
 class GeminiQuotaExceededError extends Error {}
 
 const corsHeaders = {
@@ -240,17 +238,6 @@ Deno.serve(async (req) => {
     }
   }
 
-  // 連打対策: 直近24時間の生成件数が上限を超えたら実際の生成を拒否する。
-  const dayAgo = new Date(Date.now() - RATE_LIMIT_WINDOW_HOURS * 3600_000).toISOString();
-  const { count } = await admin
-    .from("activity_suggestions")
-    .select("id", { count: "exact", head: true })
-    .eq("child_id", child_id)
-    .gte("created_at", dayAgo);
-  if ((count ?? 0) >= RATE_LIMIT_MAX_GENERATIONS) {
-    return jsonResponse({ error: "rate_limited" }, 429);
-  }
-
   if (!GEMINI_API_KEY) {
     return jsonResponse({ error: "gemini_not_configured" });
   }
@@ -320,14 +307,12 @@ async function callGemini(
   const hasCandidates = input.candidates.length > 0;
 
   const systemInstruction = [
-    "あなたは、日本の小中学生とその保護者に向けて、お金をかけずに参加できる地域の過ごし方を提案する地域情報アドバイザーです。",
+    "あなたは、日本の小学校高学年から中学生の子どもとその保護者に向けて、お金をかけずに参加できる地域の過ごし方を提案する地域情報アドバイザーです。",
     "目的は、子どもがSNSや動画から離れて現実の時間を有意義に使えるよう、実行しやすい選択肢を示すことです。",
     "【最優先の制約】参加費が無料のもの、または子どもは無料のものだけを提案してください。有料の施設・イベント・交通費が大きくかかるものは提案しないでください。",
     "【安全性】子どもだけ、または保護者と一緒に安全に参加できるものに限定します。",
     "次のものは絶対に含めないでください: 夜間のみの催し、飲酒を伴う場、個人宅や不特定多数の私的な募集、出会い目的の集まり、宗教・政治への勧誘、危険を伴う活動、年齢制限のある場所。",
-    hasCandidates
-      ? "【誠実さ】あなたはWeb検索を行えません。place_name には、ユーザーメッセージで渡す「候補地リスト」に載っている名称と完全に一致する文字列だけを使ってください。リストに無い施設名・場所名を作ってはいけません。"
-      : "【誠実さ】あなたはWeb検索を行えません。自分の知識だけで答えるため、施設名やイベント名を推測で作ってはいけません。place_name は固有名詞に確信が持てない場合は推測で書かず、「お近くの市立図書館」「近くの児童公園」のように種類がわかる一般的な書き方にしてください。",
+    "【誠実さ】あなたはWeb検索を行えません。ユーザーメッセージで近隣の候補地リストが渡された場合は参考にしてください。リストに無い施設名でも、あなたが確信を持って実在すると判断できるものであれば具体的な名前で挙げて構いません。ただし実在するか確信が持てない場合は、無理に固有名詞を作らず「お近くの市立図書館」「近くの児童公園」のように種類がわかる一般的な書き方にしてください。",
     "期間限定のイベント・お祭り・ワークショップ・開催日が決まっている催しは提案しないでください。一年を通していつでも行ける場所だけを挙げてください。",
     "具体的な開催日時・料金・電話番号・URL・アクセス方法は書かないでください。誤った情報を子どもに渡さないためです。",
     "description は丁寧語で書き、最後に必ず『場所や開いている時間は、おでかけの前におうちの人と確認してください。』を添えてください。",
@@ -346,10 +331,11 @@ async function callGemini(
     "",
     ...(candidateListText
       ? [
-        "現在地の近くにある実在の候補地リスト(この中からだけ選ぶこと):",
+        "参考: 近くにある実在確認済みの候補地リストです。この中から選んでもよいですし、",
+        "他に知っている実在の施設があれば、それを具体的に挙げても構いません:",
         candidateListText,
         "",
-        "上記の候補地の中から、活動内容に合いそうなものを選んで(全部使わなくてよい)、",
+        "活動内容に合いそうなものを選んで(全部使わなくてよい)、",
         "お金のかからない過ごし方を最大5件、JSONで提案してください。",
       ]
       : [
@@ -361,9 +347,7 @@ async function callGemini(
     "- title: アクティビティ名。子どもが読んでワクワクする短い見出し(20文字程度)。場所名ではなく、",
     "  やってみたくなる遊び方の見出しにしてください(例:「図書館で世界の絵本さがし」)",
     "- description: 詳細情報。何ができるか / どんな人向けか / 持ち物や注意点 を2〜3文で。最後に確認を促す一文",
-    hasCandidates
-      ? "- place_name: 上で渡した候補地リストの名称と完全に一致する文字列(自分で作らない)"
-      : "- place_name: 施設名や場所の名前",
+    "- place_name: 具体的な施設名(確信がある場合)。確信が持てない場合は種類がわかる一般的な表現",
     "- is_free: 完全に無料なら true。少しでも費用がかかるなら false",
     "",
     "同じ施設ばかりにならないよう、屋内・屋外・体を動かすもの・学べるもの をバランスよく混ぜてください。",
@@ -452,9 +436,9 @@ async function callGemini(
   const obj = parsed as Record<string, unknown>;
   const rawActivities = Array.isArray(obj.activities) ? obj.activities : [];
 
-  // 候補地リストを渡した場合は、name の完全一致でしか実在座標を割り当てない。
-  // 一致しない place_name は「リストにない名前を作った」ことを意味するため、
-  // プロンプト指示だけに頼らずここで機械的に弾く(誠実性の最終防波堤)。
+  // 候補地リストの name と完全一致した場合のみ実在座標を割り当てる。一致しない
+  // place_name は候補地に無い施設(Geminiが自身の知識で挙げたもの)を意味する
+  // ため、座標は付与しない(座標を捏造しないため)が、活動自体は破棄しない。
   const candidateByName = new Map(input.candidates.map((c) => [c.name, c]));
 
   const activities: GeminiActivity[] = [];
@@ -462,8 +446,6 @@ async function callGemini(
     const item = a as Record<string, unknown>;
     const placeName = String(item.place_name ?? "");
     const match = candidateByName.get(placeName);
-
-    if (hasCandidates && !match) continue; // 捏造された地名は破棄する
 
     activities.push({
       title: String(item.title ?? ""),
@@ -477,8 +459,7 @@ async function callGemini(
 
   // 0件はエラーではない: プロンプトで「実在しない場所を作らないことが最優先。
   // 5件に届かなくてもかまわない」と明示的に指示しているため、モデルが正当に
-  // 空配列を返すことがある(候補地との不一致で全件破棄された場合も含む)。
-  // 呼び出し側の filtered.length === 0 分岐が { suggestions: [] } を返す想定
-  // であり、ここで例外にすると502に化けてしまう。
+  // 空配列を返すことがある。呼び出し側の filtered.length === 0 分岐が
+  // { suggestions: [] } を返す想定であり、ここで例外にすると502に化けてしまう。
   return activities;
 }

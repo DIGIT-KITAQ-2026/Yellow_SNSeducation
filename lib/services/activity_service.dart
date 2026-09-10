@@ -17,7 +17,7 @@ typedef PendingActivityRequestRow = ({
   DateTime requestedAt,
 });
 
-enum ActivitySuggestFailure { quotaExceeded, rateLimited, notConfigured, failed }
+enum ActivitySuggestFailure { quotaExceeded, notConfigured, failed }
 
 /// `activity-suggest` Edge Function が失敗を返したときの、画面にそのまま出せる
 /// 日本語メッセージ付き例外。[LocationUnavailableException] と同じ形。
@@ -29,10 +29,10 @@ class ActivitySuggestException implements Exception {
   /// `FunctionException.details` から失敗理由を判定する。
   ///
   /// 判定は必ず body の `error` 値で行い、HTTP ステータスでは判定しない。
-  /// 自前のレートリミットも Gemini のクォータ超過もどちらも 429 を返すため、
-  /// ステータスだけでは区別できない。`details` が Map でない(HTMLエラーページ・
-  /// 空ボディ・ゲートウェイの 401/502 など)場合や `error` キーが無い/未知の値の
-  /// 場合は、原因不明の失敗として扱う(誤ってクォータ超過と伝える方が有害)。
+  /// `gemini_not_configured` は200応答でも返るため、ステータスだけでは区別できない。
+  /// `details` が Map でない(HTMLエラーページ・空ボディ・ゲートウェイの 401/502 など)
+  /// 場合や `error` キーが無い/未知の値の場合は、原因不明の失敗として扱う
+  /// (誤ってクォータ超過と伝える方が有害)。
   factory ActivitySuggestException.fromFunctionException(FunctionException e) {
     final details = e.details;
     final error = details is Map ? details['error'] : null;
@@ -46,7 +46,6 @@ class ActivitySuggestException implements Exception {
 
   static ActivitySuggestFailure _failureFromErrorCode(Object? error) => switch (error) {
         'gemini_quota_exceeded' => ActivitySuggestFailure.quotaExceeded,
-        'rate_limited' => ActivitySuggestFailure.rateLimited,
         'gemini_not_configured' => ActivitySuggestFailure.notConfigured,
         _ => ActivitySuggestFailure.failed,
       };
@@ -57,8 +56,6 @@ class ActivitySuggestException implements Exception {
   String get message => switch (failure) {
         ActivitySuggestFailure.quotaExceeded =>
           'AIの提案が今日の上限に達しました。明日またお試しください',
-        ActivitySuggestFailure.rateLimited =>
-          '今日の検索回数の上限に達しました。明日またお試しください',
         ActivitySuggestFailure.notConfigured =>
           '現在AIの提案は利用できません。おうちの方にお知らせください',
         ActivitySuggestFailure.failed =>
