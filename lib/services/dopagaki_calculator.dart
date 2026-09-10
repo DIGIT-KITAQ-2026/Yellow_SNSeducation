@@ -1,33 +1,14 @@
-import '../models/dopagaki_index.dart';
-import '../models/screen_time_day.dart';
-
-/// スクリーンタイムの記録から「ドパガキ指数」を計算する。
+/// ドパガキ指数のラベル付け(危険度の3段階)。
 ///
-/// 本来の算出はAI([AiCommentaryService])が行うが、AI未接続時のモック
-/// (`MockAiCommentaryService`)のフォールバック用に、単純な比率ベースの
-/// 計算をここに残している。
-///
-/// 指数 = その日の総利用時間に対する「ドパガキ対象アプリ
-/// (SNS・動画・ゲームなど)」の利用時間の割合(%)。
+/// 指数の算出自体はAI([AiCommentaryService])が行う。ここには、AIが返した
+/// スコアからラベル文字列を決めるための、単純なしきい値判定だけを置く。
 class DopagakiCalculator {
   const DopagakiCalculator._();
 
-  /// 0〜100のスコアから、危険度ラベルを決める。AIが返したスコアの
-  /// ラベル付けにも使う。
+  /// 0〜100のスコアから、危険度ラベルを決める。
   static String labelFor(int percentage) {
     if (percentage < 30) return '良好';
     if (percentage < 60) return '注意';
     return '危険';
-  }
-
-  static DopagakiIndex calculate(ScreenTimeDay day) {
-    final totalMinutes = day.total.inMinutes;
-    if (totalMinutes <= 0) return DopagakiIndex.empty;
-
-    final distractingMinutes = day.distractingTotal.inMinutes;
-    final percentage =
-        ((distractingMinutes / totalMinutes) * 100).round().clamp(0, 100);
-
-    return DopagakiIndex(percentage: percentage, label: labelFor(percentage));
   }
 }

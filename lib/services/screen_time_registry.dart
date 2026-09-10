@@ -6,6 +6,7 @@ import '../models/dopagaki_index.dart';
 import '../models/screen_time_day.dart';
 import 'ai_commentary_service.dart';
 import 'screen_time_service.dart';
+import 'supabase_ai_commentary_service.dart';
 
 /// スクリーンタイムとAI講評の取得状況・キャッシュを保持するシングルトン。
 ///
@@ -19,10 +20,11 @@ class ScreenTimeRegistry extends ChangeNotifier {
   static final ScreenTimeRegistry instance = ScreenTimeRegistry._();
 
   ScreenTimeService screenTimeService = MockScreenTimeService();
-  AiCommentaryService aiCommentaryService = MockAiCommentaryService();
+  AiCommentaryService aiCommentaryService = const SupabaseAiCommentaryService();
 
   final Map<String, List<ScreenTimeDay>> _screenTimeCache = {};
   final Map<String, AiCommentary> _commentaryCache = {};
+  final Map<String, String> _commentaryErrors = {};
   final Set<String> _loadingScreenTime = {};
   final Set<String> _loadingCommentary = {};
 
@@ -37,6 +39,10 @@ class ScreenTimeRegistry extends ChangeNotifier {
   AiCommentary? commentaryFor(ChildProfile child) => _commentaryCache[_keyFor(child)];
 
   bool isCommentaryLoading(ChildProfile child) => _loadingCommentary.contains(_keyFor(child));
+
+  /// 直近の `getOrGenerateCommentary` が失敗した場合の、画面にそのまま出せる
+  /// 日本語メッセージ。成功時・未リクエスト時は null。
+  String? commentaryErrorFor(ChildProfile child) => _commentaryErrors[_keyFor(child)];
 
   /// 指定した子どものスクリーンタイムを未取得なら取得する。
   Future<void> ensureScreenTimeLoaded(ChildProfile child) async {
@@ -82,6 +88,7 @@ class ScreenTimeRegistry extends ChangeNotifier {
     if (_loadingCommentary.contains(key)) return null;
 
     _loadingCommentary.add(key);
+    _commentaryErrors.remove(key);
     notifyListeners();
     try {
       await ensureScreenTimeLoaded(child);
@@ -95,6 +102,12 @@ class ScreenTimeRegistry extends ChangeNotifier {
       );
       _commentaryCache[key] = commentary;
       return commentary;
+    } on AiCommentaryException catch (e) {
+      _commentaryErrors[key] = e.message;
+      return null;
+    } catch (_) {
+      _commentaryErrors[key] = '講評を取得できませんでした。しばらくしてから、もう一度お試しください';
+      return null;
     } finally {
       _loadingCommentary.remove(key);
       notifyListeners();
@@ -105,6 +118,7 @@ class ScreenTimeRegistry extends ChangeNotifier {
   void clear() {
     _screenTimeCache.clear();
     _commentaryCache.clear();
+    _commentaryErrors.clear();
     _loadingScreenTime.clear();
     _loadingCommentary.clear();
     notifyListeners();

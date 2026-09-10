@@ -24,6 +24,7 @@ class AiCommentaryCard extends StatelessWidget {
       builder: (context, _) {
         final commentary = registry.commentaryFor(child);
         final loading = registry.isCommentaryLoading(child);
+        final error = registry.commentaryErrorFor(child);
         return GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,7 +40,31 @@ class AiCommentaryCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              if (commentary == null && !loading)
+              if (loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              else if (error != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      error,
+                      style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFF33F7FF)),
+                      ),
+                      onPressed: () => registry.getOrGenerateCommentary(child),
+                      child: const Text('再試行'),
+                    ),
+                  ],
+                )
+              else if (commentary == null)
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
@@ -51,14 +76,9 @@ class AiCommentaryCard extends StatelessWidget {
                     child: const Text('講評を見る'),
                   ),
                 )
-              else if (loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                )
               else ...[
                 Text(
-                  commentary!.summary,
+                  commentary.summary,
                   style: const TextStyle(fontSize: 13, height: 1.5, color: Colors.white),
                 ),
                 const SizedBox(height: 12),

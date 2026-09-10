@@ -6,8 +6,6 @@ import 'screens/auth_gate.dart';
 import 'screens/child_signup_screen.dart';
 import 'screens/missing_config_screen.dart';
 import 'screens/parent_signup_screen.dart';
-import 'services/screen_time_registry.dart';
-import 'services/supabase_ai_commentary_service.dart';
 import 'supabase_config.dart';
 import 'theme/app_colors.dart';
 
@@ -23,9 +21,9 @@ Future<void> main() async {
       url: SupabaseConfig.url,
       publishableKey: SupabaseConfig.anonKey,
     );
-    // ai-review Edge Function 経由でGeminiによる実際のAI講評を生成する。
-    // APIキー未設定・通信エラー時は内部でモックにフォールバックする。
-    ScreenTimeRegistry.instance.aiCommentaryService = SupabaseAiCommentaryService();
+    // ai-review Edge Function 経由でGeminiによる実際のAI講評を生成する
+    // (ScreenTimeRegistry.aiCommentaryService の既定が SupabaseAiCommentaryService
+    // のため、ここでの差し替えは不要)。
   }
   runApp(const YellowSnsEducationApp());
 }
