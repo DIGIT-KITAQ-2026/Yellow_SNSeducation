@@ -48,8 +48,11 @@ class _HomeBodyState extends State<HomeBody> {
     _lastLoadedChild = child;
     // ensureScreenTimeLoaded synchronously calls notifyListeners(), which must
     // not happen while this widget's own build is still in progress.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScreenTimeRegistry.instance.ensureScreenTimeLoaded(child);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ScreenTimeRegistry.instance.ensureScreenTimeLoaded(child);
+      // ドパガキ指数はAI講評とセットで算出されるため、ホーム画面表示時点で
+      // 「講評を見る」を押さなくても指数が出ているように、ここで先読みする。
+      ScreenTimeRegistry.instance.getOrGenerateCommentary(child);
     });
   }
 

@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Robot Yellow Heart</title>
+  <desc>Clean vector SVG of the second robot character.</desc>
+
+  <!-- Antenna -->
+  <path d="M430 72H594V178H430Z" fill="#F4F45A" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M460 75V120M486 75V116" fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Head -->
+  <path d="M338 178H686V390H338Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+
+  <!-- Eyes -->
+  <circle cx="445" cy="270" r="48" fill="#000"/>
+  <circle cx="579" cy="270" r="48" fill="#000"/>
+  <circle cx="460" cy="252" r="18" fill="#FFF"/>
+  <circle cx="594" cy="252" r="18" fill="#FFF"/>
+
+  <!-- Body -->
+  <path d="M282 390H742V744H282Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+
+  <!-- Yellow heart -->
+  <path d="M512 684
+           C475 678 363 616 363 523
+           C363 469 400 438 444 438
+           C481 438 502 459 512 486
+           C522 459 543 438 580 438
+           C624 438 661 469 661 523
+           C661 616 549 678 512 684Z"
+        fill="#FFFF55" stroke="#666" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- Left arm -->
+  <path d="M282 430
+           C251 425 226 442 212 470
+           L184 548
+           L216 606
+           C247 581 272 531 282 430Z"
+        fill="#8ADFE5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Left claw -->
+  <path d="M184 548
+           C151 555 139 585 144 617
+           L176 620
+           C177 605 186 596 198 601
+           C210 606 214 617 208 628
+           L226 642
+           C249 624 252 594 235 573
+           C222 557 205 550 184 548Z"
+        fill="#CFCFCF" stroke="#666" stroke-width="10"/>
+
+  <!-- Right arm -->
+  <path d="M742 430
+           C773 425 798 442 812 470
+           L840 548
+           L808 606
+           C777 581 752 531 742 430Z"
+        fill="#8ADFE5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Right claw -->
+  <path d="M840 548
+           C873 555 885 585 880 617
+           L848 620
+           C847 605 838 596 826 601
+           C814 606 810 617 816 628
+           L798 642
+           C775 624 772 594 789 573
+           C802 557 819 550 840 548Z"
+        fill="#CFCFCF" stroke="#666" stroke-width="10"/>
+
+  <!-- Left seated leg -->
+  <path d="M300 744
+           C290 780 292 823 310 858
+           C326 890 352 911 383 916
+           C409 920 432 904 440 879
+           C449 849 441 813 421 788
+           C402 764 378 751 349 744Z"
+        fill="#8ADFE5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Left foot -->
+  <path d="M310 858
+           C326 890 352 911 383 916
+           C409 920 432 904 440 879
+           C449 849 441 813 421 788
+           C403 812 382 829 357 840
+           C339 848 324 854 310 858Z"
+        fill="#31989C" stroke="#666" stroke-width="9"/>
+
+  <!-- Right seated leg -->
+  <path d="M724 744
+           C734 780 732 823 714 858
+           C698 890 672 911 641 916
+           C615 920 592 904 584 879
+           C575 849 583 813 603 788
+           C622 764 646 751 675 744Z"
+        fill="#8ADFE5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Right foot -->
+  <path d="M714 858
+           C698 890 672 911 641 916
+           C615 920 592 904 584 879
+           C575 849 583 813 603 788
+           C621 812 642 829 667 840
+           C685 848 700 854 714 858Z"
+        fill="#31989C" stroke="#666" stroke-width="9"/>
+</svg>

@@ -2,27 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-class FuturisticBackground extends StatefulWidget {
+/// アプリ共通のサイバーパンク風背景。以前は横線が奥から手前へ流れる
+/// アニメーションだったが、視認性を優先して静止画にしている。
+class FuturisticBackground extends StatelessWidget {
   const FuturisticBackground({super.key, required this.child});
 
   final Widget child;
-
-  @override
-  State<FuturisticBackground> createState() => _FuturisticBackgroundState();
-}
-
-class _FuturisticBackgroundState extends State<FuturisticBackground>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 8),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,13 +16,8 @@ class _FuturisticBackgroundState extends State<FuturisticBackground>
       child: Stack(
         fit: StackFit.expand,
         children: [
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) => CustomPaint(
-              painter: _FuturisticGridPainter(_controller.value),
-            ),
-          ),
-          widget.child,
+          CustomPaint(painter: _FuturisticGridPainter()),
+          child,
         ],
       ),
     );
@@ -45,10 +25,6 @@ class _FuturisticBackgroundState extends State<FuturisticBackground>
 }
 
 class _FuturisticGridPainter extends CustomPainter {
-  _FuturisticGridPainter(this.t);
-
-  final double t;
-
   static final List<_Particle> _particles = List.generate(
     36,
     (i) {
@@ -57,8 +33,7 @@ class _FuturisticGridPainter extends CustomPainter {
         dx: random.nextDouble(),
         dy: random.nextDouble(),
         radius: 0.8 + random.nextDouble() * 1.8,
-        speed: 0.3 + random.nextDouble() * 0.7,
-        phase: random.nextDouble(),
+        brightness: 0.25 + random.nextDouble() * 0.5,
       );
     },
   );
@@ -94,11 +69,8 @@ class _FuturisticGridPainter extends CustomPainter {
     canvas.drawRect(skyRect, glowPaint);
 
     for (final p in _particles) {
-      final y = ((p.dy + t * p.speed + p.phase) % 1.0) * horizonY;
-      final twinkle = (sin((t * 2 * pi * (1 + p.speed)) + p.phase * 10) + 1) / 2;
-      final paint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.25 + twinkle * 0.5);
-      canvas.drawCircle(Offset(p.dx * size.width, y), p.radius, paint);
+      final paint = Paint()..color = Colors.white.withValues(alpha: p.brightness);
+      canvas.drawCircle(Offset(p.dx * size.width, p.dy * horizonY), p.radius, paint);
     }
 
     final gridPaint = Paint()
@@ -113,14 +85,15 @@ class _FuturisticGridPainter extends CustomPainter {
       canvas.drawLine(vanishingPoint, Offset(xBottom, size.height), gridPaint);
     }
 
-    const lineCount = 10;
+    // 奥行きを出すための固定の横線(以前は手前に流れるアニメーションだった)。
+    const lineCount = 5;
     for (var i = 0; i < lineCount; i++) {
-      final progress = ((i / lineCount) + t) % 1.0;
+      final progress = (i + 1) / (lineCount + 1);
       final eased = progress * progress;
       final y = horizonY + (size.height - horizonY) * eased;
       final fade = (1 - progress).clamp(0.0, 1.0);
       final linePaint = Paint()
-        ..color = const Color(0xFF33F7FF).withValues(alpha: fade * 0.7)
+        ..color = const Color(0xFF33F7FF).withValues(alpha: fade * 0.5)
         ..strokeWidth = 1.2
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
@@ -138,7 +111,7 @@ class _FuturisticGridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FuturisticGridPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _FuturisticGridPainter oldDelegate) => false;
 }
 
 class _Particle {
@@ -146,13 +119,11 @@ class _Particle {
     required this.dx,
     required this.dy,
     required this.radius,
-    required this.speed,
-    required this.phase,
+    required this.brightness,
   });
 
   final double dx;
   final double dy;
   final double radius;
-  final double speed;
-  final double phase;
+  final double brightness;
 }
