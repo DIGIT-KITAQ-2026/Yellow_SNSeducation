@@ -42,7 +42,7 @@ class ScreenTimeCard extends StatelessWidget {
                   style: TextStyle(fontSize: 12, color: palette.textSecondary),
                 ),
                 const SizedBox(height: 8),
-                AppBreakdownList(day: days!.first, palette: palette),
+                AppBreakdownList(weekDays: days!, palette: palette),
               ],
             ],
           ),
