@@ -11,6 +11,7 @@ DBスキーマ・RPCの詳細は [db_schema.md](db_schema.md) を参照。
 - [全体構成](#全体構成)
 - [ホーム画面の表示ロジック(HomeBody)](#ホーム画面の表示ロジックhomebody)
 - [状態管理(ScreenTimeRegistry)](#状態管理screentimeregistry)
+- [保護者は講評を生成しない](#保護者は講評を生成しない)
 - [ドパガキ指数の算出](#ドパガキ指数の算出)
 - [ドパガキ対象アプリの判定](#ドパガキ対象アプリの判定)
 - [カード一覧](#カード一覧)
@@ -130,14 +131,31 @@ Column(
 | `screenTimeFor(child)` / `isScreenTimeLoading(child)` | キャッシュ済みのスクリーンタイムと読み込み中フラグ |
 | `commentaryFor(child)` / `isCommentaryLoading(child)` | キャッシュ済みのAI講評と読み込み中フラグ |
 | `commentaryErrorFor(child)` | 直近の `getOrGenerateCommentary` が失敗した場合の日本語メッセージ。成功時・未リクエスト時は `null` |
+| `commentaryNotGeneratedFor(child)` | 保存済みの講評を読みにいったが、その日の講評がまだ生成されていなかったかどうか(保護者のみ起こり得る)。エラーではないので `commentaryErrorFor` とは別に持つ |
+| `canGenerateCommentary(child)` | この端末で講評を**生成**してよいか。ログイン中の本人(子ども)が自分のデータを見ているときだけ `true`([保護者は読むだけ](#保護者は講評を生成しない)参照) |
 | `ensureScreenTimeLoaded(child)` | 未取得なら `screenTimeService.fetchRecentScreenTime` を呼び、結果をキャッシュ |
-| `refreshScreenTime(child)` | キャッシュ(スクリーンタイム・AI講評とも)を破棄して再取得 |
+| `refreshScreenTime(child)` | キャッシュ(スクリーンタイム・AI講評とも)を破棄して再取得。`force` の予約(`_commentaryNeedsRegenerate`)を付けるのは `canGenerateCommentary` が `true` のときだけ |
 | `dopagakiIndexFor(child)` | キャッシュ済みのAI講評があればその `dopagakiIndex`。無ければスクリーンタイム未取得時は `DopagakiIndex.empty`、取得済みだが講評未生成なら `DopagakiIndex.notGenerated`(「未算出」) |
-| `getOrGenerateCommentary(child)` | キャッシュがあれば返す。無ければスクリーンタイムの取得を待って `aiCommentaryService.generateCommentary` を呼び、結果をキャッシュ |
-| `regenerateCommentary(child)` | AI講評だけを作り直す。メモリ上のキャッシュを先に破棄して `notifyListeners()` するため、カードは古い講評を表示し続けずに即座にローディング状態へ切り替わる。`force: true` で呼ぶため、サーバ側の `ai_reviews` の行も上書きされる(`(child_id, date)` の一意制約による upsert なので、古い行が別行として残ることはない) |
+| `getOrGenerateCommentary(child)` | キャッシュがあれば返す。無ければ、子ども本人の端末ならスクリーンタイムの取得を待って `aiCommentaryService.generateCommentary` を呼び、保護者なら `aiCommentaryService.fetchCommentary` で保存済みの講評を読むだけ。どちらも結果をキャッシュ |
+| `regenerateCommentary(child)` | AI講評を取り直す。メモリ上のキャッシュを先に破棄して `notifyListeners()` するため、カードは古い講評を表示し続けずに即座にローディング状態へ切り替わる。子ども本人の端末では `force: true` で呼ぶため、サーバ側の `ai_reviews` の行も上書きされる(`(child_id, date)` の一意制約による upsert なので、古い行が別行として残ることはない)。保護者の端末では保存済みの講評の読み直しになる |
 | `clear()` | 全キャッシュを破棄。サインアウト時に呼ばれる |
 
 サインアウト時は [session_bridge.dart](../lib/services/session_bridge.dart) の `SessionBridge.clear()` が `ChildRegistry.instance.clear()` と合わせて `ScreenTimeRegistry.instance.clear()` を呼ぶ。
+
+### 保護者は講評を生成しない
+
+**AI講評を生成してよいのは、その子ども本人がログインしている端末だけ**(`ScreenTimeRegistry.canGenerateCommentary`)。保護者の端末は読むだけで、`ai-review` Edge Function も呼ばない。判定条件は `DeviceScreenTimeService._isOwnDevice`(端末のスクリーンタイムを使ってよいかの判定)と同じ。
+
+理由は、保護者側には**その日の実データが無い**ため:
+
+- 保護者のスクリーンタイムは `SupabaseScreenTimeService` 経由で、子ども端末が同期した分しか読めない。同期は子どもがアプリを開いたときにバックグラウンドで走る(`DeviceScreenTimeService._syncInBackground`)ので、それまでは空。
+- `SupabaseScreenTimeService.fetchRecentScreenTime` はデータの無い日も空リストで埋めて必ず7日分を返すため、`getOrGenerateCommentary` の `days.isEmpty` ガードは保護者側では成立しない。結果、総利用0分・アプリ「(記録なし)」でGeminiを呼んでいた。
+- `ai-review` は生成結果を `(child_id, date)` で `ai_reviews` に upsert し、以降は `force` なしの呼び出しにそれを返す。つまり**保護者がホーム画面を先に開くだけで、その日の講評が「記録なし・0点」で固定され、子ども側にも同じものが返り続けていた**。
+- 同じ理由で、保護者の引っ張って更新(`refreshScreenTime`)も `force: true` を予約しないようにしている。予約すると、保護者が読めた範囲のデータで子どもの講評が上書きされてしまう。
+
+保護者側の読み取りは `AiCommentaryService.fetchCommentary` で、`ai_reviews` を直接 select する(`0007_rls.sql` の `ai_reviews_select` により、同じグループのメンバーなら select できる)。対象日は「昨日」で `SupabaseScreenTimeService` が返す最新日と揃えており、スクリーンタイムの取得結果には依存しない。そのためスクリーンタイムを参照できない端末(iOS・Web等)の保護者でも、講評だけは読める。
+
+行が無い場合はエラーではなく「まだ生成されていない」として扱い、`commentaryNotGeneratedFor(child)` が `true` になる。`AiCommentaryCard` はこのとき「昨日の講評はまだありません。お子さまがアプリを開くと作成されます」と「読み込み直す」ボタンを表示する。
 
 ---
 
@@ -208,6 +226,7 @@ Geminiは点数と一緒に、その点数にした理由(`score_reason`)も返�
 - 未取得かつ未読込中・エラー無し → 「講評を見る」ボタン。押下で `getOrGenerateCommentary(child)` を呼ぶ
 - 読込中 → `CircularProgressIndicator`
 - 直近の取得が失敗(`commentaryErrorFor(child)` が非null) → エラー文言 + 「再試行」ボタン
+- 保存済みの講評がまだ無い(`commentaryNotGeneratedFor(child)` が true。保護者のみ起こり得る) → 「昨日の講評はまだありません。お子さまがアプリを開くと作成されます」+ 「読み込み直す」ボタン
 - 取得済み → `summary` 本文 + `scoreReason`(あれば `ドパガキ指数 XX%(ラベル)の理由` 見出し付きのブロック)+ `adviceList` の箇条書き + 生成時刻(`generatedAt` を `HH:mm 時点の講評` 形式で表示)
 - 「講評を見る」を押して一度表示された後(`_revealed == true`)は、見出し行の右端にリロードアイコン(`Icons.refresh_rounded`)が出る。押すと `registry.regenerateCommentary(child)` を呼び、古い講評を消してから作り直す。読込中は無効化され、二重に押せない
 
@@ -240,12 +259,19 @@ abstract class AiCommentaryService {
     required ScreenTimeDay screenTime,
     bool force = false,
   });
+
+  Future<AiCommentary?> fetchCommentary({
+    required ChildProfile child,
+    required DateTime date,
+  });
 }
 ```
 
+`generateCommentary` を呼んでよいのは子ども本人の端末だけで、保護者は `fetchCommentary`(保存済みの講評を読むだけ・生成しない)を使う([保護者は講評を生成しない](#保護者は講評を生成しない)参照)。
+
 ドパガキ指数もこのサービスが算出する(`AiCommentary.dopagakiIndex`)ため、`dopagakiIndex` は引数に無い。
 
-`force` は「サーバ側に同じ日付の講評が保存済みでも作り直す」フラグ。`ScreenTimeRegistry.refreshScreenTime`(引っ張って更新)を通ったキーだけ `true` になる(`_commentaryNeedsRegenerate`)。これが無いと、スクリーンタイムの同期が終わる前に一度生成された講評が `ai_reviews` に固定され、その日はデータを取り直しても古い数字ベースの講評が返り続けてしまう。
+`force` は「サーバ側に同じ日付の講評が保存済みでも作り直す」フラグ。`ScreenTimeRegistry.refreshScreenTime`(引っ張って更新)を通ったキーのうち、**子ども本人の端末のもの**だけ `true` になる(`_commentaryNeedsRegenerate`)。これが無いと、スクリーンタイムの同期が終わる前に一度生成された講評が `ai_reviews` に固定され、その日はデータを取り直しても古い数字ベースの講評が返り続けてしまう。
 
 **`SupabaseAiCommentaryService`**([supabase_ai_commentary_service.dart](../lib/services/supabase_ai_commentary_service.dart)) — 実際にGeminiで生成する唯一の実装で、モックへのフォールバックは無い。`ScreenTimeRegistry.aiCommentaryService` の既定値であり、`main.dart` での差し替えは不要(`ActivityService.locationService` と同じ流儀)。
 
@@ -280,6 +306,9 @@ abstract class AiCommentaryService {
 - 検証2: 「講評を見る」タップ後にボタンが消え、講評本文が表示される
 - 検証3: 講評にドパガキ指数の採点理由(`ドパガキ指数 XX%(ラベル)の理由` の見出し + 本文)が表示される
 - 検証4: ドパガキ指数は講評生成前は「未算出」、生成後はAIが返した値になる
+- 検証5(`保護者ログイン時` グループ): 保護者でログインしている間は `generateCommentary` が一度も呼ばれず、`fetchCommentary` の結果だけが表示されること・保存済みの講評が無ければ案内が出ること・引っ張って更新しても生成が走らないこと
+
+生成側の検証(1〜4)は `AppSession.loginAsChild` で子ども本人としてログインした状態で走らせる。保護者のままだと `canGenerateCommentary` が `false` になり、生成経路を通らないため。
 
 **注意**: `FuturisticBackground` は `AnimationController(...)..repeat()` で無限にアニメーションし続けるため、`pumpAndSettle()` は永久にタイムアウトする。テストでは `tester.pump()` + 固定時間の `tester.pump(Duration(...))` を使うこと。
 
@@ -290,7 +319,7 @@ abstract class AiCommentaryService {
 - **スクリーンタイムは Android 実機のみ実データ**。`ScreenTimeRegistry.screenTimeService` の既定値は `DeviceScreenTimeService` で、子ども本人が Android 端末でログインしている場合のみ `AndroidScreenTimeService`(`UsageStatsManager` を MethodChannel `com.yellow.yellow_sns_education/screen_time` 経由で呼ぶ)から取得し、その結果を `screen_time_daily`/`screen_time_apps`([db_schema.md](db_schema.md#screen_time_daily--screen_time_apps--スクリーンタイム))へバックグラウンド同期する。保護者(または子ども以外)は `SupabaseScreenTimeService` でそのテーブルを読む。iOS・Web・デスクトップでは(保護者のログイン先が Chrome 等の場合も含めて)`ScreenTimeUnavailableException(unsupportedPlatform)` を投げ、「お使いの端末ではスクリーンタイム参照ができません」を表示する。`MockScreenTimeService` はテスト用の差し替え先として引き続き残っている
 - **`AppUsage.color` に対応するDB列は無い**。`screen_time_apps` は `app_id`/`app_label` のみを持つため、`AppCatalog`(`lib/services/app_catalog.dart`)がパッケージ名から色を決める。既知アプリ(YouTube/TikTok/Instagram等)は固定のブランド色、未知アプリはパッケージ名から決定的に生成した色になる
 - **内訳は「ユーザーが自分で開くアプリ」だけに絞っている**。`UsageStatsManager` はシステムUI・IME・ホームアプリなど裏方のフォアグラウンド時間も返すため、`ScreenTimePlugin.queryDailyUsage` でランチャー用エントリを持たないパッケージ(`getLaunchIntentForPackage` が null)とホームアプリ(`CATEGORY_HOME` の解決先)を除外している。絞らないと総利用時間が膨らみ、AI講評が「一番よく使っているアプリ」としてランチャーを挙げてしまう。副作用として、ランチャーから起動できない特殊なアプリも内訳から落ちる
-- **すでに `ai_reviews` に保存済みの過去日の講評は作り直されない**。`force` は `refreshScreenTime` を通ったキーにしか付かないため、`score_reason` 列の追加より前に生成された行は理由が null のまま残る。その日の講評を作り直したい場合は、ホーム画面で下に引っ張って更新してから「講評を見る」を押す
+- **すでに `ai_reviews` に保存済みの過去日の講評は作り直されない**。`force` は `refreshScreenTime` を通ったキーにしか付かないため、`score_reason` 列の追加より前に生成された行は理由が null のまま残る。その日の講評を作り直したい場合は、**子どもの端末で**ホーム画面を下に引っ張って更新してから「講評を見る」を押す(保護者の端末では作り直しは走らない)
 - **Edge Functionはリクエストボディのスクリーンタイムをそのまま信頼する**。`ai-review` は呼び出し元が「同じグループのメンバーか」だけを検証しており、送られてきた `screen_time` の値自体が本物かは検証していない。将来的に `screen_time_daily`/`screen_time_apps` から直接読む実装に変えれば、この点は解消される
 - **`purge_old_screen_time()` の自動実行は未設定**([db_schema.md](db_schema.md#未対応今後の課題)と共通)。`ai_reviews` は保持期間の対象外なので、こちらは影響しない
 - **AI講評はモックへのフォールバックを行わない**。`GEMINI_API_KEY` 未設定・通信エラー・Gemini呼び出し失敗時は `AiCommentaryCard` にエラー文言と「再試行」ボタンが出るだけで、講評自体は表示されない。ダミー文言で体験を継続させていた以前の挙動と異なる点に注意

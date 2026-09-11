@@ -38,6 +38,11 @@ class _FakeScreenTimeService implements ScreenTimeService {
 
 class _FakeAiCommentaryService implements AiCommentaryService {
   int callCount = 0;
+  int fetchCount = 0;
+
+  /// `fetchCommentary`(保存済みの講評の読み取り)が返す値。null なら「まだ
+  /// 生成されていない」を表す。
+  AiCommentary? saved;
 
   @override
   Future<AiCommentary> generateCommentary({
@@ -54,10 +59,29 @@ class _FakeAiCommentaryService implements AiCommentaryService {
       dopagakiIndex: const DopagakiIndex(percentage: 75, label: '危険'),
     );
   }
+
+  @override
+  Future<AiCommentary?> fetchCommentary({
+    required ChildProfile child,
+    required DateTime date,
+  }) async {
+    fetchCount++;
+    return saved;
+  }
 }
 
 Widget buildApp() {
   return const MaterialApp(home: Scaffold(body: HomeBody()));
+}
+
+// ignore: library_private_types_in_public_api
+late _FakeAiCommentaryService aiService;
+
+/// 子ども本人としてログインし直す。講評の**生成**が走るのはこの状態のときだけ
+/// (`ScreenTimeRegistry.canGenerateCommentary`)。
+void loginAsChild() {
+  final child = ChildRegistry.instance.children.first;
+  AppSession.instance.loginAsChild(child);
 }
 
 void main() {
@@ -65,11 +89,13 @@ void main() {
     ChildRegistry.instance.clear();
     ScreenTimeRegistry.instance.clear();
     AppSession.instance.loginAsParent();
+    aiService = _FakeAiCommentaryService();
     ScreenTimeRegistry.instance.screenTimeService = _FakeScreenTimeService();
-    ScreenTimeRegistry.instance.aiCommentaryService = _FakeAiCommentaryService();
+    ScreenTimeRegistry.instance.aiCommentaryService = aiService;
 
     AppSession.instance.setGroupCode('group1');
     ChildRegistry.instance.addChild('テストこども1', groupCode: 'group1');
+    loginAsChild();
   });
 
   // FuturisticBackground runs a never-ending AnimationController, so
@@ -154,5 +180,72 @@ void main() {
     // _FakeAiCommentaryService が返す「危険」になる。
     expect(find.text('未算出'), findsNothing);
     expect(find.text('危険'), findsOneWidget);
+  });
+
+  group('保護者ログイン時', () {
+    setUp(() {
+      // 保護者は自分の端末に子どものスクリーンタイムを持たないため、講評を
+      // 生成させない(= 空データで ai_reviews を上書きさせない)。
+      AppSession.instance.loginAsParent();
+      AppSession.instance.setGroupCode('group1');
+      ChildRegistry.instance.selectChild('テストこども1');
+    });
+
+    testWidgets('保存済みの講評を読むだけで、生成は呼ばれない', (tester) async {
+      aiService.saved = AiCommentary(
+        summary: '保存済みの講評です。',
+        adviceList: const ['保存済みのアドバイス'],
+        generatedAt: DateTime(2026, 9, 7, 9, 0),
+        scoreReason: '保存済みの採点理由です。',
+        dopagakiIndex: const DopagakiIndex(percentage: 40, label: '注意'),
+      );
+
+      await tester.pumpWidget(buildApp());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.scrollUntilVisible(find.text('講評を見る'), 300);
+      await tester.tap(find.text('講評を見る'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.text('保存済みの講評です。'), findsOneWidget);
+      expect(aiService.callCount, 0);
+      expect(aiService.fetchCount, greaterThan(0));
+    });
+
+    testWidgets('子どもがまだ講評を作っていなければ案内を出し、生成はしない', (tester) async {
+      aiService.saved = null;
+
+      await tester.pumpWidget(buildApp());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      await tester.scrollUntilVisible(find.text('講評を見る'), 300);
+      await tester.tap(find.text('講評を見る'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        find.text('昨日の講評はまだありません。お子さまがアプリを開くと作成されます'),
+        findsOneWidget,
+      );
+      expect(find.text('読み込み直す'), findsOneWidget);
+      expect(aiService.callCount, 0);
+    });
+
+    testWidgets('引っ張って更新しても講評を作り直さない', (tester) async {
+      aiService.saved = null;
+
+      await tester.pumpWidget(buildApp());
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      final child = ChildRegistry.instance.children.first;
+      await ScreenTimeRegistry.instance.refreshScreenTime(child);
+      await ScreenTimeRegistry.instance.getOrGenerateCommentary(child);
+
+      expect(aiService.callCount, 0);
+    });
   });
 }

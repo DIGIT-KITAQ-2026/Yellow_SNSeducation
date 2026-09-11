@@ -38,6 +38,10 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
         final commentary = registry.commentaryFor(widget.child);
         final loading = registry.isCommentaryLoading(widget.child);
         final error = registry.commentaryErrorFor(widget.child);
+        final notGenerated = registry.commentaryNotGeneratedFor(widget.child);
+        // 保護者の端末は講評を生成しない(読むだけ)ため、文言も作り直しでは
+        // なく読み込み直しにする。
+        final canGenerate = registry.canGenerateCommentary(widget.child);
         return GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,7 +58,7 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
                     const Spacer(),
                     IconButton(
                       icon: Icon(Icons.refresh_rounded, color: palette.textSecondary, size: 20),
-                      tooltip: '講評を作り直す',
+                      tooltip: canGenerate ? '講評を作り直す' : '講評を読み込み直す',
                       onPressed: loading ? null : () => registry.regenerateCommentary(widget.child),
                     ),
                   ],
@@ -97,6 +101,27 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
                       ),
                       onPressed: () => registry.getOrGenerateCommentary(widget.child),
                       child: const Text('再試行'),
+                    ),
+                  ],
+                )
+              else if (notGenerated)
+                // 保護者が、子どもがまだアプリを開いていない日の講評を見ようと
+                // した場合。保護者側では生成しないため、案内だけを出す。
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '昨日の講評はまだありません。お子さまがアプリを開くと作成されます',
+                      style: TextStyle(fontSize: 12, color: palette.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: palette.textPrimary,
+                        side: BorderSide(color: palette.accent),
+                      ),
+                      onPressed: () => registry.getOrGenerateCommentary(widget.child),
+                      child: const Text('読み込み直す'),
                     ),
                   ],
                 )

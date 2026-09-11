@@ -53,6 +53,12 @@ class AiCommentaryException implements Exception {
 /// `(child_id, date)` に対しては Edge Function 側でキャッシュされた同一の
 /// 講評が返る(=親子で同じ講評・同じドパガキ指数を見られる)。
 ///
+/// 生成([generateCommentary])を呼ぶのは子ども本人の端末だけで、保護者は
+/// [fetchCommentary] で `ai_reviews` を直接読むだけにする(`ai_reviews_select`
+/// のRLSにより、同じグループのメンバーなら select できる)。保護者側は端末の
+/// スクリーンタイムを持たず、Supabaseから読んだ「まだ同期されていない=空」の
+/// データで生成してしまうと、その日の講評が記録なし・0点で固定されてしまうため。
+///
 /// 常に実際のGemini呼び出しの結果を採用する(モックへのフォールバックは行わない)。
 /// 失敗した場合は [AiCommentaryException](または想定外のレスポンス形状であれば
 /// [FormatException])を投げる。呼び出し側([ScreenTimeRegistry.getOrGenerateCommentary])
@@ -109,18 +115,69 @@ class SupabaseAiCommentaryService implements AiCommentaryService {
       throw AiCommentaryException.fromErrorCode(data['error']);
     }
 
-    final percentage = (data['dopagaki_score'] as num).round().clamp(0, 100);
-    final summary = data['summary'] as String;
-    final advice = (data['advice'] as List).map((e) => e.toString()).toList();
-    final generatedAt = data['created_at'] != null
-        ? DateTime.tryParse(data['created_at'] as String) ?? DateTime.now()
-        : DateTime.now();
+    return _commentaryFrom(
+      score: data['dopagaki_score'] as num?,
+      summary: data['summary'] as String,
+      advice: data['advice'],
+      scoreReason: data['score_reason'] as String?,
+      createdAt: data['created_at'] as String?,
+    );
+  }
 
+  @override
+  Future<AiCommentary?> fetchCommentary({
+    required ChildProfile child,
+    required DateTime date,
+  }) async {
+    final childId = child.id;
+    // Supabase未連携のローカル専用プロフィール。保存済みの講評は存在し得ない。
+    if (childId == null) return null;
+
+    final Object? row;
+    try {
+      row = await Supabase.instance.client
+          .from('ai_reviews')
+          .select('dopagaki_score, score_reason, comment, advice, created_at')
+          .eq('child_id', childId)
+          .eq('date', _formatDate(date))
+          .maybeSingle();
+    } on PostgrestException catch (e) {
+      throw AiCommentaryException(AiCommentaryFailure.failed, detail: e.toString());
+    }
+
+    // 行が無い = その日の講評はまだ生成されていない(子どもがまだアプリを
+    // 開いていない)。エラーではないので null を返し、呼び出し側が
+    // 「まだ講評がありません」を出す。
+    if (row == null) return null;
+
+    final map = row as Map<String, dynamic>;
+    return _commentaryFrom(
+      score: map['dopagaki_score'] as num?,
+      // DB上の列名は `comment`(Edge Function の応答では `summary`)。
+      summary: map['comment'] as String,
+      advice: map['advice'],
+      scoreReason: map['score_reason'] as String?,
+      createdAt: map['created_at'] as String?,
+    );
+  }
+
+  /// Edge Function の応答と `ai_reviews` の行、どちらからでも [AiCommentary] を
+  /// 組み立てる共通処理。`dopagaki_score` は列がnull許容なので、欠けていれば0扱い。
+  AiCommentary _commentaryFrom({
+    required num? score,
+    required String summary,
+    required Object? advice,
+    required String? scoreReason,
+    required String? createdAt,
+  }) {
+    final percentage = (score ?? 0).round().clamp(0, 100);
     return AiCommentary(
       summary: summary,
-      adviceList: advice,
-      generatedAt: generatedAt,
-      scoreReason: data['score_reason'] as String?,
+      adviceList: advice is List ? advice.map((e) => e.toString()).toList() : const [],
+      generatedAt: createdAt != null
+          ? DateTime.tryParse(createdAt)?.toLocal() ?? DateTime.now()
+          : DateTime.now(),
+      scoreReason: scoreReason,
       dopagakiIndex: DopagakiIndex(
         percentage: percentage,
         label: DopagakiCalculator.labelFor(percentage),

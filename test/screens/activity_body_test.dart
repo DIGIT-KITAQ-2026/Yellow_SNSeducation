@@ -60,6 +60,14 @@ class _FakeAiCommentaryService implements AiCommentaryService {
       dopagakiIndex: const DopagakiIndex(percentage: 0, label: '良好'),
     );
   }
+
+  @override
+  Future<AiCommentary?> fetchCommentary({
+    required ChildProfile child,
+    required DateTime date,
+  }) async {
+    return null;
+  }
 }
 
 Widget buildActivityBodyApp() {
