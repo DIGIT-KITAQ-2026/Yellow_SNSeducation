@@ -213,12 +213,12 @@ class _GiftBodyState extends State<GiftBody> {
               )
             else
               GridView.count(
-                crossAxisCount: 4,
+                crossAxisCount: 2,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 1,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.95,
                 children: [
                   for (final item in _items)
                     _GiftItemCard(
@@ -341,7 +341,7 @@ class _GiftItemCard extends StatelessWidget {
     return Stack(
       children: [
         GlassCard(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -363,35 +363,35 @@ class _GiftItemCard extends StatelessWidget {
                         child: Icon(
                           Icons.image_outlined,
                           color: palette.accent.withValues(alpha: 0.6),
-                          size: 16,
+                          size: 32,
                         ),
                       ),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 8),
               Text(
                 item.title,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  fontSize: 10,
+                  fontSize: 15,
                   color: palette.textPrimary,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     '${item.points}P',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 9, color: palette.accent),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: palette.accent),
                   ),
                   InkWell(
                     onTap: isEditing ? onToggleAlwaysVisible : null,
                     customBorder: const CircleBorder(),
                     child: Icon(
                       item.alwaysVisible ? Icons.push_pin : Icons.push_pin_outlined,
-                      size: 12,
+                      size: 18,
                       color: item.alwaysVisible
                           ? palette.accentSecondary
                           : palette.textDisabled.withValues(alpha: isEditing ? 0.8 : 0.4),
@@ -400,13 +400,13 @@ class _GiftItemCard extends StatelessWidget {
                 ],
               ),
               if (insufficientPoints) ...[
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 const Text(
                   '交換ポイントが足りません。',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.redAccent, fontSize: 8, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ],
             ],
@@ -414,59 +414,60 @@ class _GiftItemCard extends StatelessWidget {
         ),
         if (isEditing) ...[
           Positioned(
-            top: 2,
-            left: 2,
+            top: 4,
+            left: 4,
             child: InkWell(
               onTap: onEdit,
               customBorder: const CircleBorder(),
               child: Container(
-                width: 22,
-                height: 22,
+                width: 30,
+                height: 30,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: palette.isDark ? Colors.white.withValues(alpha: 0.1) : palette.surfaceAlt,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.lightBlueAccent.withValues(alpha: 0.6)),
                 ),
-                child: const Icon(Icons.edit_outlined, size: 12, color: Colors.lightBlueAccent),
+                child: const Icon(Icons.edit_outlined, size: 16, color: Colors.lightBlueAccent),
               ),
             ),
           ),
           Positioned(
-            top: 2,
-            right: 2,
+            top: 4,
+            right: 4,
             child: InkWell(
               onTap: onDelete,
               customBorder: const CircleBorder(),
               child: Container(
-                width: 22,
-                height: 22,
+                width: 30,
+                height: 30,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: palette.isDark ? Colors.white.withValues(alpha: 0.1) : palette.surfaceAlt,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6)),
                 ),
-                child: const Icon(Icons.close, size: 14, color: Colors.redAccent),
+                child: const Icon(Icons.close, size: 18, color: Colors.redAccent),
               ),
             ),
           ),
         ],
-        if (childProfile != null)
+        // ポイント不足のときはカード内に説明を出すので、交換ボタン自体を隠す。
+        if (childProfile != null && !insufficientPoints)
           Positioned(
-            bottom: 2,
-            right: 2,
+            bottom: 4,
+            right: 4,
             child: InkWell(
-              onTap: (pending || insufficientPoints) ? null : onRequestExchange,
+              onTap: pending ? null : onRequestExchange,
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: (palette.isDark ? Colors.white : palette.textPrimary)
-                      .withValues(alpha: (pending || insufficientPoints) ? 0.05 : 0.12),
+                      .withValues(alpha: pending ? 0.05 : 0.12),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: (pending || insufficientPoints)
+                    color: pending
                         ? palette.textDisabled.withValues(alpha: 0.5)
                         : palette.accentSecondary.withValues(alpha: 0.7),
                   ),
@@ -474,11 +475,9 @@ class _GiftItemCard extends StatelessWidget {
                 child: Text(
                   pending ? '申請中' : '交換',
                   style: TextStyle(
-                    fontSize: 8,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: (pending || insufficientPoints)
-                        ? palette.textDisabled
-                        : palette.accentSecondary,
+                    color: pending ? palette.textDisabled : palette.accentSecondary,
                   ),
                 ),
               ),
