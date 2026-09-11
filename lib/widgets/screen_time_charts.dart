@@ -11,67 +11,72 @@ String _formatDuration(Duration d) {
   return '$m分';
 }
 
-/// 直近7日間の合計スクリーンタイムを棒グラフで表示する。
-/// [days] は新しい日付順(先頭が昨日)を想定。
-class WeeklyScreenTimeChart extends StatelessWidget {
-  final List<ScreenTimeDay> days;
+/// 1日分のスクリーンタイムを、0〜23時の時間帯ごとの棒グラフで表示する。
+/// [day] は最新日(先頭 = 昨日)を想定。[day.hourlyUsage] が未取得(null)の
+/// 場合は「記録がありません」を表示する。
+class HourlyScreenTimeChart extends StatelessWidget {
+  final ScreenTimeDay day;
   final AppPalette palette;
 
-  const WeeklyScreenTimeChart({super.key, required this.days, required this.palette});
+  const HourlyScreenTimeChart({super.key, required this.day, required this.palette});
 
-  static const _weekdayLabels = ['月', '火', '水', '木', '金', '土', '日'];
+  /// 3時間おきにだけ時刻ラベルを出す(24本ぶんだと文字が詰まりすぎるため)。
+  static const _labeledHours = {0, 3, 6, 9, 12, 15, 18, 21};
 
   @override
   Widget build(BuildContext context) {
-    if (days.isEmpty) {
-      return Text('記録がありません', style: TextStyle(color: palette.textSecondary));
+    final hourly = day.hourlyUsage;
+    if (hourly == null || hourly.length != 24) {
+      return Text('時間帯別の記録がありません', style: TextStyle(color: palette.textSecondary));
     }
 
-    final chronological = days.reversed.toList();
-    final maxMinutes = chronological
-        .map((d) => d.total.inMinutes)
+    final maxMinutes = hourly
+        .map((d) => d.inMinutes)
         .fold<int>(1, (max, v) => v > max ? v : max);
-    const chartHeight = 110.0;
+    const chartHeight = 90.0;
 
-    return SizedBox(
-      height: chartHeight + 40,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: chronological.map((day) {
-          final ratio = maxMinutes == 0 ? 0.0 : day.total.inMinutes / maxMinutes;
-          final barHeight = (chartHeight * ratio).clamp(4.0, chartHeight);
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatDuration(day.total),
-                    style: TextStyle(fontSize: 9, color: palette.textSecondary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '合計 ${_formatDuration(day.total)}',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: palette.textPrimary),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: chartHeight + 20,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(24, (hour) {
+              final minutes = hourly[hour].inMinutes;
+              final ratio = maxMinutes == 0 ? 0.0 : minutes / maxMinutes;
+              final barHeight = minutes == 0 ? 2.0 : (chartHeight * ratio).clamp(4.0, chartHeight);
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Container(
+                        height: barHeight,
+                        decoration: BoxDecoration(
+                          color: minutes == 0 ? palette.surfaceAlt : palette.accent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _labeledHours.contains(hour) ? '$hour' : '',
+                        style: TextStyle(fontSize: 9, color: palette.textSecondary),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Container(
-                    height: barHeight,
-                    decoration: BoxDecoration(
-                      color: palette.accent,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _weekdayLabels[day.date.weekday - 1],
-                    style: TextStyle(fontSize: 11, color: palette.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
-      ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
     );
   }
 }

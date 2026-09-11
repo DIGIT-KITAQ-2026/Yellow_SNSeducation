@@ -21,7 +21,7 @@
     <!-- 端末再起動後もスケジュール済みの毎朝の通知アラームを復元するため。 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
-        android:label="yellow_sns_education"
+        android:label="ドパデト"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

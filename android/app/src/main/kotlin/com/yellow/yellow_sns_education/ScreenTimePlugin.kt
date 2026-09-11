@@ -1,6 +1,7 @@
 package com.yellow.yellow_sns_education
 
 import android.app.AppOpsManager
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.app.Activity
 import android.content.Context
@@ -85,6 +86,14 @@ class ScreenTimePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                     result.error("query_failed", e.message, null)
                 }
             }
+            "queryHourlyUsage" -> {
+                val dateStr = call.argument<String>("date")
+                try {
+                    result.success(queryHourlyUsage(dateStr))
+                } catch (e: Exception) {
+                    result.error("query_failed", e.message, null)
+                }
+            }
             else -> result.notImplemented()
         }
     }
@@ -162,23 +171,7 @@ class ScreenTimePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             }
         }
 
-        // ホームアプリは CATEGORY_LAUNCHER ではなく CATEGORY_HOME で登録されている
-        // ため getLaunchIntentForPackage では落ちない。個別に集めて除外する。
-        val homePackages = pm
-            .queryIntentActivities(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
-                0,
-            )
-            .map { it.activityInfo.packageName }
-            .toSet()
-
-        val userFacingCache = HashMap<String, Boolean>()
-        fun isUserFacing(packageName: String): Boolean {
-            return userFacingCache.getOrPut(packageName) {
-                packageName !in homePackages &&
-                    pm.getLaunchIntentForPackage(packageName) != null
-            }
-        }
+        val isUserFacing = buildIsUserFacingChecker(pm)
 
         val result = ArrayList<Map<String, Any?>>()
         val todayStart = Calendar.getInstance(tz).apply {
@@ -219,5 +212,129 @@ class ScreenTimePlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         }
 
         return result
+    }
+
+    /**
+     * [queryDailyUsage] と同じ「ユーザーが自分で開くアプリ」だけに絞る判定を、
+     * [queryHourlyUsage] とも共有するためのファクトリ。ホームアプリの集合と
+     * 判定結果はどちらもキャッシュして使い回す。
+     */
+    private fun buildIsUserFacingChecker(pm: PackageManager): (String) -> Boolean {
+        // ホームアプリは CATEGORY_LAUNCHER ではなく CATEGORY_HOME で登録されている
+        // ため getLaunchIntentForPackage では落ちない。個別に集めて除外する。
+        val homePackages = pm
+            .queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+                0,
+            )
+            .map { it.activityInfo.packageName }
+            .toSet()
+
+        val userFacingCache = HashMap<String, Boolean>()
+        return { packageName ->
+            userFacingCache.getOrPut(packageName) {
+                packageName !in homePackages &&
+                    pm.getLaunchIntentForPackage(packageName) != null
+            }
+        }
+    }
+
+    /**
+     * [date](yyyy-MM-dd、未指定なら昨日)の1日分を、0〜23時の各時間帯における
+     * 全アプリ合計の利用分数(0〜60)として24要素で返す。取得できたイベントが
+     * 無ければ(端末のイベント保持期間切れ等)全て0の配列を返す。
+     *
+     * [queryDailyUsage] の [UsageStatsManager.queryAndAggregateUsageStats] は
+     * 区間合計しか返さず時間帯に按分できないため、こちらは
+     * [UsageStatsManager.queryEvents] で ACTIVITY_RESUMED/PAUSED
+     * (MOVE_TO_FOREGROUND/BACKGROUND、値は同じ)を突き合わせて前景セッションの
+     * 区間を作り、その区間を時間境界で切って各時間バケットに秒数を積む。
+     */
+    private fun queryHourlyUsage(date: String?): List<Int> {
+        val ctx = context ?: throw IllegalStateException("no context")
+        val usm = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val pm = ctx.packageManager
+        val tz = TimeZone.getDefault()
+
+        val dayStart = if (date != null) {
+            val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = tz }.parse(date)
+                ?: throw IllegalArgumentException("invalid date: $date")
+            Calendar.getInstance(tz).apply {
+                time = parsed
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+        } else {
+            Calendar.getInstance(tz).apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                add(Calendar.DAY_OF_YEAR, -1)
+            }
+        }
+        val dayEnd = (dayStart.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
+        val from = dayStart.timeInMillis
+        val to = dayEnd.timeInMillis
+
+        val isUserFacing = buildIsUserFacingChecker(pm)
+
+        // 各アプリの「前景に入った時刻」。ACTIVITY_PAUSED が来たらセッションを
+        // 確定してバケットに積み、除去する。範囲末尾まで前景のままだったアプリは
+        // 最後に `to` で締める。
+        val sessionStarts = HashMap<String, Long>()
+        val bucketMillis = LongArray(24)
+
+        fun closeSession(packageName: String, endMillis: Long) {
+            val startMillis = sessionStarts.remove(packageName) ?: return
+            addSessionToBuckets(startMillis.coerceAtLeast(from), endMillis.coerceAtMost(to), dayStart, bucketMillis)
+        }
+
+        val events = usm.queryEvents(from, to)
+        val event = UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val packageName = event.packageName ?: continue
+            if (packageName == SELF_PACKAGE) continue
+            if (!isUserFacing(packageName)) continue
+
+            when (event.eventType) {
+                UsageEvents.Event.MOVE_TO_FOREGROUND ->
+                    sessionStarts[packageName] = event.timeStamp
+                UsageEvents.Event.MOVE_TO_BACKGROUND ->
+                    closeSession(packageName, event.timeStamp)
+            }
+        }
+        // まだ前景のまま範囲が終わったアプリは `to` で締める。
+        for (packageName in sessionStarts.keys.toList()) {
+            closeSession(packageName, to)
+        }
+
+        return bucketMillis.map { (it / 60000L).toInt().coerceIn(0, 60) }
+    }
+
+    /**
+     * [startMillis, endMillis) の前景セッションを、属する時間バケット
+     * (0〜23、[dayStart] からの経過時間で決まる)に按分して積む。
+     */
+    private fun addSessionToBuckets(
+        startMillis: Long,
+        endMillis: Long,
+        dayStart: Calendar,
+        bucketMillis: LongArray,
+    ) {
+        if (endMillis <= startMillis) return
+        val dayStartMillis = dayStart.timeInMillis
+        var cursor = startMillis
+        while (cursor < endMillis) {
+            val elapsed = cursor - dayStartMillis
+            val hour = (elapsed / 3_600_000L).toInt().coerceIn(0, 23)
+            val hourEnd = dayStartMillis + (hour + 1) * 3_600_000L
+            val segmentEnd = minOf(endMillis, hourEnd)
+            bucketMillis[hour] += segmentEnd - cursor
+            cursor = segmentEnd
+        }
     }
 }

@@ -95,9 +95,48 @@ class AndroidScreenTimeService implements ScreenTimeService {
 
     final parsedDays = raw.map(_parseDay).toList();
     // ネイティブ側は新しい日付順(今日が先頭)で返すので、今日を除いて返す。
-    return parsedDays.length > days
+    final result = parsedDays.length > days
         ? parsedDays.sublist(1)
         : parsedDays;
+
+    if (result.isEmpty) return result;
+
+    // 時間帯別グラフは最新日(先頭 = 昨日)分だけ使うため、その1日分だけ
+    // 追加で取得する。失敗しても日別データの表示は壊さず、hourlyUsage は
+    // null のまま返す。
+    final hourly = await _fetchHourlyUsage(result.first.date);
+    if (hourly == null) return result;
+
+    final withHourly = ScreenTimeDay(
+      date: result.first.date,
+      usages: result.first.usages,
+      hourlyUsage: hourly,
+    );
+    return [withHourly, ...result.sublist(1)];
+  }
+
+  Future<List<Duration>?> _fetchHourlyUsage(DateTime date) async {
+    try {
+      final result = await _channel.invokeMethod<List<Object?>>(
+        'queryHourlyUsage',
+        {'date': _formatDate(date)},
+      );
+      if (result == null) return null;
+      return result
+          .map((minutes) => Duration(minutes: (minutes as num).toInt()))
+          .toList();
+    } on PlatformException catch (e) {
+      _logFailure(e);
+      return null;
+    } on MissingPluginException catch (e) {
+      _logFailure(e);
+      return null;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${date.year}-${two(date.month)}-${two(date.day)}';
   }
 
   ScreenTimeDay _parseDay(Object? entry) {

@@ -61,13 +61,22 @@ class ScreenTimeCard extends StatelessWidget {
                   onPressed: needsPermission ? onOpenSettings : onRetry,
                   palette: palette,
                 )
-              else if (days == null)
+              else if (days == null || days!.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent)),
+                  child: Center(
+                    child: days == null
+                        ? CircularProgressIndicator(strokeWidth: 2, color: palette.accent)
+                        : Text('記録がありません', style: TextStyle(color: palette.textSecondary)),
+                  ),
                 )
               else ...[
-                WeeklyScreenTimeChart(days: days!, palette: palette),
+                Text(
+                  '昨日の時間帯別',
+                  style: TextStyle(fontSize: 12, color: palette.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                HourlyScreenTimeChart(day: days!.first, palette: palette),
                 const SizedBox(height: 8),
                 Divider(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.3 : 0.6)),
                 const SizedBox(height: 8),

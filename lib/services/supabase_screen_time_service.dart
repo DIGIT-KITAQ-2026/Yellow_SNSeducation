@@ -59,12 +59,47 @@ class SupabaseScreenTimeService implements ScreenTimeService {
           );
     }
 
+    // 時間帯別グラフは最新日(先頭 = 昨日)分だけ使うため、その1日分だけ読む。
+    final yesterday = startOfToday.subtract(const Duration(days: 1));
+    final hourlyByDate = await _fetchHourlyUsage(childId, yesterday);
+
     // 新しい日付順(昨日が先頭)で、データが無い日も空リストで埋めて日付軸を保つ。
     return List.generate(days, (i) {
       final date = startOfToday.subtract(Duration(days: i + 1));
       final key = _formatDate(date);
-      return ScreenTimeDay(date: date, usages: appsByDate[key] ?? const []);
+      return ScreenTimeDay(
+        date: date,
+        usages: appsByDate[key] ?? const [],
+        hourlyUsage: key == _formatDate(yesterday) ? hourlyByDate : null,
+      );
     });
+  }
+
+  /// [date]分の時間帯別内訳(0〜23時、24要素)。行が1件も無ければ null。
+  Future<List<Duration>?> _fetchHourlyUsage(String childId, DateTime date) async {
+    final List<Object?> rows;
+    try {
+      rows = await _client
+          .from('screen_time_hourly')
+          .select('hour, minutes')
+          .eq('child_id', childId)
+          .eq('date', _formatDate(date));
+    } on PostgrestException catch (e) {
+      throw ScreenTimeUnavailableException(
+        ScreenTimeUnavailableReason.failed,
+        detail: e.toString(),
+      );
+    }
+    if (rows.isEmpty) return null;
+
+    final minutesByHour = List<int>.filled(24, 0);
+    for (final row in rows) {
+      final map = row as Map<String, dynamic>;
+      final hour = (map['hour'] as num).toInt();
+      if (hour < 0 || hour > 23) continue;
+      minutesByHour[hour] = (map['minutes'] as num).toInt();
+    }
+    return minutesByHour.map((m) => Duration(minutes: m)).toList();
   }
 
   /// 子ども端末で取得したその日までの分を upsert する。
@@ -101,6 +136,32 @@ class SupabaseScreenTimeService implements ScreenTimeService {
               'minutes': usage.duration.inMinutes,
             },
         ], onConflict: 'child_id,date,app_id');
+      }
+
+      final hourly = day.hourlyUsage;
+      if (hourly != null) {
+        // アプリ別内訳と同じ流儀: その日の行を消してから、0分でない時間帯だけ入れ直す。
+        await _client
+            .from('screen_time_hourly')
+            .delete()
+            .eq('child_id', childId)
+            .eq('date', dateStr);
+
+        final nonZero = [
+          for (var hour = 0; hour < hourly.length; hour++)
+            if (hourly[hour].inMinutes > 0) (hour, hourly[hour].inMinutes),
+        ];
+        if (nonZero.isNotEmpty) {
+          await _client.from('screen_time_hourly').upsert([
+            for (final (hour, minutes) in nonZero)
+              {
+                'child_id': childId,
+                'date': dateStr,
+                'hour': hour,
+                'minutes': minutes,
+              },
+          ], onConflict: 'child_id,date,hour');
+        }
       }
     }
 

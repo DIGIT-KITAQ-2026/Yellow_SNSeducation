@@ -50,6 +50,14 @@ class _AiCommentaryCardState extends State<AiCommentaryCard> {
                     'AIによる講評',
                     style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary, fontSize: 18),
                   ),
+                  if (_revealed) ...[
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(Icons.refresh_rounded, color: palette.textSecondary, size: 20),
+                      tooltip: '講評を作り直す',
+                      onPressed: loading ? null : () => registry.regenerateCommentary(widget.child),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 12),

@@ -158,6 +158,20 @@ class ScreenTimeRegistry extends ChangeNotifier {
     }
   }
 
+  /// AI講評だけを作り直す。古い講評(メモリ上のキャッシュ・サーバ側の
+  /// ai_reviews の行)は破棄され、新しい講評に置き換わる。
+  Future<void> regenerateCommentary(ChildProfile child) async {
+    final key = _keyFor(child);
+    if (_loadingCommentary.contains(key)) return;
+    // 先に消してから notifyListeners することで、カードは古い講評を
+    // 表示し続けずに即座にローディング状態へ切り替わる。
+    _commentaryCache.remove(key);
+    _commentaryErrors.remove(key);
+    _commentaryNeedsRegenerate.add(key);
+    notifyListeners();
+    await getOrGenerateCommentary(child);
+  }
+
   /// サインアウト時にキャッシュを全て破棄する。
   void clear() {
     _screenTimeCache.clear();

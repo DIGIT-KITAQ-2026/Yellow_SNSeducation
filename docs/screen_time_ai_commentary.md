@@ -56,7 +56,7 @@ lib/
   widgets/
     dopagaki_index_card.dart      # 「昨日のドパガキ指数」カード
     screen_time_card.dart         # 「先日のスクリーンタイム」カード
-    screen_time_charts.dart       # ↑が使う週次グラフ/アプリ別内訳リスト
+    screen_time_charts.dart       # ↑が使う時間帯別グラフ/アプリ別内訳リスト
     ai_commentary_card.dart       # 「AIによる講評」カード
   screens/
     home_body.dart                # 上記3枚のカードを並べるホーム画面本体
@@ -134,6 +134,7 @@ Column(
 | `refreshScreenTime(child)` | キャッシュ(スクリーンタイム・AI講評とも)を破棄して再取得 |
 | `dopagakiIndexFor(child)` | キャッシュ済みのAI講評があればその `dopagakiIndex`。無ければスクリーンタイム未取得時は `DopagakiIndex.empty`、取得済みだが講評未生成なら `DopagakiIndex.notGenerated`(「未算出」) |
 | `getOrGenerateCommentary(child)` | キャッシュがあれば返す。無ければスクリーンタイムの取得を待って `aiCommentaryService.generateCommentary` を呼び、結果をキャッシュ |
+| `regenerateCommentary(child)` | AI講評だけを作り直す。メモリ上のキャッシュを先に破棄して `notifyListeners()` するため、カードは古い講評を表示し続けずに即座にローディング状態へ切り替わる。`force: true` で呼ぶため、サーバ側の `ai_reviews` の行も上書きされる(`(child_id, date)` の一意制約による upsert なので、古い行が別行として残ることはない) |
 | `clear()` | 全キャッシュを破棄。サインアウト時に呼ばれる |
 
 サインアウト時は [session_bridge.dart](../lib/services/session_bridge.dart) の `SessionBridge.clear()` が `ChildRegistry.instance.clear()` と合わせて `ScreenTimeRegistry.instance.clear()` を呼ぶ。
@@ -197,8 +198,8 @@ Geminiは点数と一緒に、その点数にした理由(`score_reason`)も返�
 
 - `days == null || isLoading` の間はローディング表示
 - 取得後は [screen_time_charts.dart](../lib/widgets/screen_time_charts.dart) の2つのウィジェットを表示:
-  - `WeeklyScreenTimeChart` … 直近7日間(`days`、先頭が昨日)の合計利用時間を棒グラフで表示
-  - `AppBreakdownList` … 最新日(`days.first` = 昨日)のアプリ別内訳を横棒グラフで表示
+  - `HourlyScreenTimeChart` … 最新日(`days.first` = 昨日)の時間帯別(0〜23時)利用時間を棒グラフで表示。`ScreenTimeDay.hourlyUsage`(24要素、未取得時は null)が無ければ「時間帯別の記録がありません」を表示
+  - `AppBreakdownList` … 直近7日間(`days`)を使い、最新日のアプリ別内訳を横棒グラフで表示。行タップで「昨日 vs 先週平均」の詳細が見られる(先週平均の算出に7日分すべてを使う)
 
 ### AiCommentaryCard(AIによる講評)
 
@@ -208,6 +209,7 @@ Geminiは点数と一緒に、その点数にした理由(`score_reason`)も返�
 - 読込中 → `CircularProgressIndicator`
 - 直近の取得が失敗(`commentaryErrorFor(child)` が非null) → エラー文言 + 「再試行」ボタン
 - 取得済み → `summary` 本文 + `scoreReason`(あれば `ドパガキ指数 XX%(ラベル)の理由` 見出し付きのブロック)+ `adviceList` の箇条書き + 生成時刻(`generatedAt` を `HH:mm 時点の講評` 形式で表示)
+- 「講評を見る」を押して一度表示された後(`_revealed == true`)は、見出し行の右端にリロードアイコン(`Icons.refresh_rounded`)が出る。押すと `registry.regenerateCommentary(child)` を呼び、古い講評を消してから作り直す。読込中は無効化され、二重に押せない
 
 ---
 

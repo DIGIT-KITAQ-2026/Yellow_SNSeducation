@@ -50,6 +50,7 @@ erDiagram
     profiles ||--o{ point_entries : "ledger for"
     profiles ||--o{ screen_time_daily : "tracked for"
     screen_time_daily ||--o{ screen_time_apps : "breaks down into"
+    screen_time_daily ||--o{ screen_time_hourly : "breaks down into"
     profiles ||--o{ ai_reviews : "reviewed for"
     profiles ||--o{ activity_suggestions : "suggested to"
     activity_suggestions ||--o{ activity_requests : "requested via"
@@ -115,6 +116,12 @@ erDiagram
         date date PK
         text app_id PK
         int minutes
+    }
+    screen_time_hourly {
+        uuid child_id PK_FK
+        date date PK
+        smallint hour PK "0-23"
+        smallint minutes "0-60"
     }
     ai_reviews {
         uuid id PK
@@ -292,7 +299,7 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 - インデックス: `(child_id, created_at desc)`
 - `recompute_point_balance(child_id)` で台帳から残高を再計算できる。`profiles.point_balance` がずれた疑いがあるときの照合用
 
-### `screen_time_daily` / `screen_time_apps` — スクリーンタイム
+### `screen_time_daily` / `screen_time_apps` / `screen_time_hourly` — スクリーンタイム
 
 子の端末から同期する。**直近分のみ保持**(初期値7日)。
 
@@ -317,6 +324,18 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 
 - `(child_id, date)` → `screen_time_daily` への外部キー(**on delete cascade**)。保持期間の削除が自動で連鎖する
 - PKが `(child_id, date)` / `(child_id, date, app_id)` なので、**同じ日を再同期するときはUPSERT**する
+
+**`screen_time_hourly`**(時間帯別内訳。時間別グラフを保護者側でも表示するため)
+
+| 列 | 型 | 制約 | 説明 |
+|---|---|---|---|
+| `child_id` | uuid | PK, not null | |
+| `date` | date | PK, not null | |
+| `hour` | smallint | PK, not null, check `0-23` | |
+| `minutes` | smallint | not null, check `0-60` | その時間帯の全アプリ合計利用分数 |
+
+- `screen_time_apps` と同じ形: `(child_id, date)` → `screen_time_daily` への外部キー(**on delete cascade**)。0分の時間帯は行を作らない
+- 現状は `screen_time_apps` と同様に最新日(昨日)分だけが埋まる想定([screen_time_ai_commentary.md](screen_time_ai_commentary.md)参照)
 
 **保持期間の管理**
 
@@ -428,6 +447,7 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 | `point_entries` | 同一グループ全員 | RPC経由のみ | — | — |
 | `screen_time_daily` | 同一グループ全員 | 子本人のみ | 子本人のみ | — |
 | `screen_time_apps` | 同一グループ全員 | 子本人のみ | 子本人のみ | — |
+| `screen_time_hourly` | 同一グループ全員 | 子本人のみ | 子本人のみ | 子本人のみ |
 | `ai_reviews` | 同一グループ全員 | service role のみ | — | — |
 | `activity_suggestions` | 同一グループ全員 | service role のみ | — | — |
 | `activity_requests` | 子: 自分の分 / 親: グループ内 | 子が自分の分のみ | RPC経由のみ | — |

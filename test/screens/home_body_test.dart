@@ -37,14 +37,17 @@ class _FakeScreenTimeService implements ScreenTimeService {
 }
 
 class _FakeAiCommentaryService implements AiCommentaryService {
+  int callCount = 0;
+
   @override
   Future<AiCommentary> generateCommentary({
     required ChildProfile child,
     required ScreenTimeDay screenTime,
     bool force = false,
   }) async {
+    callCount++;
     return AiCommentary(
-      summary: 'テスト用の講評です。',
+      summary: callCount == 1 ? 'テスト用の講評です。' : '作り直した講評です。',
       adviceList: const ['テスト用のアドバイス'],
       generatedAt: DateTime(2026, 9, 7, 9, 0),
       scoreReason: 'YouTube 90分がドパガキ対象で、総利用時間120分の大半を占めるためです。',
@@ -117,6 +120,29 @@ void main() {
       find.text('YouTube 90分がドパガキ対象で、総利用時間120分の大半を占めるためです。'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('リロードボタンを押すと講評が作り直される', (tester) async {
+    await tester.pumpWidget(buildApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    await tester.scrollUntilVisible(find.text('講評を見る'), 300);
+    await tester.tap(find.text('講評を見る'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('テスト用の講評です。'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.refresh_rounded));
+    await tester.pump();
+
+    // 古い講評は押した瞬間に消え、ローディング表示に切り替わる。
+    expect(find.text('テスト用の講評です。'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('作り直した講評です。'), findsOneWidget);
   });
 
   testWidgets('ドパガキ指数は起動時に自動でAIの値になる', (tester) async {

@@ -103,7 +103,46 @@ class MockScreenTimeService implements ScreenTimeService {
           ),
         );
       }
-      return ScreenTimeDay(date: date, usages: usages);
+      // 時間帯別グラフのデモ用に、最新日(i == 0、先頭 = 昨日)だけ生成する。
+      // 夕方〜夜に寄せた重みで、その日の合計利用時間(usages)に按分する。
+      final hourlyUsage = i == 0 ? _generateHourlyUsage(random, usages) : null;
+      return ScreenTimeDay(date: date, usages: usages, hourlyUsage: hourlyUsage);
     });
+  }
+
+  /// 学校・就寝時間帯を薄く、夕方〜夜を厚くした重みで [totalMinutes] を
+  /// 24時間に按分する(実機でよく見る分布に寄せたデモ用の乱数)。
+  static const _hourWeights = [
+    1, 1, 1, 1, 1, 1, // 0-5時: 就寝
+    2, 3, 2, 2, 2, 2, // 6-11時: 登校・学校
+    3, 2, 2, 2, 3, 5, // 12-17時: 昼休み・下校
+    8, 9, 8, 6, 4, 2, // 18-23時: 夕食後〜就寝前
+  ];
+
+  List<Duration> _generateHourlyUsage(Random random, List<AppUsage> usages) {
+    final totalMinutes =
+        usages.fold<int>(0, (sum, u) => sum + u.duration.inMinutes);
+    if (totalMinutes <= 0) {
+      return List.generate(24, (_) => Duration.zero);
+    }
+
+    // 重みに軽くランダム性を持たせつつ、各時間は端末上の実利用と同じ上限
+    // (60分)でクランプする。
+    final jittered = _hourWeights
+        .map((w) => (w * (0.7 + random.nextDouble() * 0.6)))
+        .toList();
+    final weightSum = jittered.fold<double>(0, (s, w) => s + w);
+
+    var remaining = totalMinutes;
+    final minutesByHour = List<int>.filled(24, 0);
+    for (var hour = 0; hour < 24; hour++) {
+      final share = hour == 23
+          ? remaining
+          : (totalMinutes * jittered[hour] / weightSum).round();
+      final minutes = share.clamp(0, 60).clamp(0, remaining);
+      minutesByHour[hour] = minutes;
+      remaining -= minutes;
+    }
+    return minutesByHour.map((m) => Duration(minutes: m)).toList();
   }
 }

@@ -188,79 +188,61 @@ class DopagakiIndexCard extends StatelessWidget {
         final color = _colorFor(palette);
         return GlassCard(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '昨日のドパガキ指数',
-                              style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
-                            ),
-                            const SizedBox(width: 6),
-                            InfoButton(
-                              onTap: () => _showDopagakiExplanation(context, palette),
-                            ),
-                          ],
-                        ),
-                        if (!isLoading) ...[
-                          const SizedBox(height: 4),
-                          Text(index.label, style: TextStyle(fontSize: 12, color: color)),
-                        ],
-                      ],
-                    ),
+                  Text(
+                    '昨日のドパガキ指数',
+                    style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
                   ),
+                  const SizedBox(width: 6),
+                  InfoButton(
+                    onTap: () => _showDopagakiExplanation(context, palette),
+                  ),
+                  const Spacer(),
                   if (isLoading)
                     SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent),
-                    )
-                  else ...[
-                    if (!_isUnscored) ...[
-                      SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: SvgPicture.asset(robotAssetForPercentage(index.percentage)),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: color, width: 2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: _isUnscored
-                          ? Text(
-                              '—',
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
-                            )
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  '${index.percentage}',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color),
-                                ),
-                                Text(' %', style: TextStyle(fontSize: 13, color: color)),
-                              ],
-                            ),
                     ),
-                  ],
                 ],
               ),
-              if (!isLoading && !_isUnscored) ...[
-                const SizedBox(height: 16),
-                _DopagakiGauge(percentage: index.percentage, palette: palette),
+              if (!isLoading) ...[
+                const SizedBox(height: 12),
+                // 指数の数値 → ロボット → ゲージ の縦並び。
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      _isUnscored ? '—' : '${index.percentage}',
+                      style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold, color: color, height: 1),
+                    ),
+                    if (!_isUnscored)
+                      Text(' %', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: color)),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  index.label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color),
+                ),
+                if (!_isUnscored) ...[
+                  const SizedBox(height: 8),
+                  Center(
+                    child: SizedBox(
+                      width: 132,
+                      height: 132,
+                      child: SvgPicture.asset(robotAssetForPercentage(index.percentage)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _DopagakiGauge(percentage: index.percentage, palette: palette),
+                ],
               ],
             ],
           ),

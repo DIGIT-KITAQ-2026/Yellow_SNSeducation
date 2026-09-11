@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<title>App Icon</title>
+<rect width="1024" height="1024" fill="#FFFFFF"/>
+<g transform="translate(512,512) scale(0.92) translate(-514,-507)">
+<path d="M430 75H594V180H430Z" fill="#16E8A8" stroke="#666" stroke-width="10"/>
+<path d="M460 78V124M487 78V116" fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+<path d="M335 180H689V400H335Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+<circle cx="445" cy="292" r="50" fill="#000"/><circle cx="579" cy="292" r="50" fill="#000"/>
+<circle cx="461" cy="273" r="19" fill="#fff"/><circle cx="595" cy="273" r="19" fill="#fff"/>
+<path d="M285 400H739V750H285Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+<path d="M512 685C474 678 365 616 365 522C365 468 400 438 444 438C479 438 502 458 512 486C522 458 545 438 580 438C624 438 659 468 659 522C659 616 550 678 512 685Z" fill="#16E8A8" stroke="#666" stroke-width="9"/>
+<path d="M285 448C254 430 225 437 201 462L125 555L235 625C267 575 282 523 285 448Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+<path d="M125 555C91 563 77 594 82 627L116 631C117 613 127 603 140 608C153 613 158 626 151 639L170 654C195 635 198 604 181 581C167 563 148 555 125 555Z" fill="#CFCFCF" stroke="#666" stroke-width="10"/>
+<path d="M739 448C770 430 799 437 823 462L899 555L789 625C757 575 742 523 739 448Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+<path d="M899 555C933 563 947 594 942 627L908 631C907 613 897 603 884 608C871 613 866 626 873 639L854 654C829 635 826 604 843 581C857 563 876 555 899 555Z" fill="#CFCFCF" stroke="#666" stroke-width="10"/>
+<path d="M333 750C318 789 318 850 329 900C335 925 359 940 388 940C418 940 441 925 447 900C458 850 458 789 441 750Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+<path d="M583 750C566 789 566 850 577 900C583 925 606 940 636 940C665 940 689 925 695 900C706 850 706 789 691 750Z" fill="#8ADFE5" stroke="#666" stroke-width="10"/>
+<path d="M355 902V934M669 902V934" fill="none" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+</g>
+</svg>
