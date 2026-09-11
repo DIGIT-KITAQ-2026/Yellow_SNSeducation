@@ -35,7 +35,17 @@
 
 **申請がトリガーなのは、入口が揃っていないから。** クエスト達成申請はクライアントからの直 INSERT(`QuestService.requestAchievement`)、交換申請は `request_reward` RPC 経由と経路が違う。トリガーにすれば、どちらから来ても1箇所で拾える。
 
-**承認/却下がトリガーにできないのは、行が消えるから。** `approve_task_request` は `tasks` を物理削除して `task_requests` を cascade で消す(0010)ので、UPDATE トリガーが発火しない。`approve_reward_request` も `always_visible` の分岐で申請行を消す(0011)。そのため 0017 で各 RPC を `create or replace` し、本体の末尾に `notify_child` を1行足している。
+**承認/却下がトリガーにできないのは、行が消えるから。** `approve_task_request` は `tasks` を物理削除する(0010)ので UPDATE トリガーが発火せず、却下は申請行そのものを消す(0019)。そのため 0017 で各 RPC を `create or replace` し、本体の末尾に `notify_child` を1行足している。
+
+## 申請行の寿命(0019)
+
+「何を了承したのか」を通知から後から辿れるようにするため、申請行(`task_requests` / `reward_redemptions` / `activity_requests`)は承認後も残す。
+
+- **承認** … 申請行は `status='approved'` のまま残る。`tasks` / `rewards` を消すタイミングは従来どおり承認時。`task_requests.task_id` は cascade ではなく `on delete set null` にしてあるので(0019)、`tasks` が消えても申請行は生き延びる
+- **却下** … 申請行を即削除する。子どもはやり直して再申請できる状態に戻るだけで、残しておく意味が無い
+- **掃除** … `notifications` の DELETE に張った `trg_cleanup_request_on_notification_delete` が、同じ `request_id` を指す通知が親子とも消えた時点で申請行を消す
+
+親宛の申請通知(`quest_request` など)の payload には決着が入っていないので、詳細画面は `RequestDecisionService` で申請行を引いて判定する。**行が無い → 却下 / `approved` → 承認済み / `pending` → 未処理**。
 
 ## `kind` と payload
 
@@ -66,10 +76,14 @@
 |---|---|
 | `lib/models/app_notification.dart` | `notifications` の1行 |
 | `lib/services/notification_messages.dart` | `kind` + payload → 表示文面 / スタンプ画像(純粋関数) |
-| `lib/services/notification_service.dart` | Supabase の薄いラッパー(取得・既読)。行を作るのはサーバなので insert は無い |
-| `lib/services/notification_registry.dart` | 一覧を保持するシングルトン。`replaceAll` / `addFromRealtime` / `markRead` / `unreadCount` |
+| `lib/services/notification_service.dart` | Supabase の薄いラッパー(取得・既読・削除・一括削除)。行を作るのはサーバなので insert は無い |
+| `lib/services/notification_registry.dart` | 一覧を保持するシングルトン。`replaceAll` / `addFromRealtime` / `markRead` / `remove` / `removeAll` / `unreadCount` |
 | `lib/services/notification_realtime.dart` | 自分宛の INSERT を購読し、ベル更新・OS通知・子ども側の状態反映を行う |
+| `lib/services/request_decision_service.dart` | 親宛の申請通知から、その申請の決着(承認/却下/未処理)を引く |
 | `lib/widgets/notification_bell.dart` | ベルと一覧ダイアログ。親・子で同じ一覧を出す |
+| `lib/widgets/notification_detail_dialog.dart` | 処理済みの通知をタップしたときの詳細。消去ボタンもここ |
+
+一覧の行をタップしたときの分岐は `NotificationBell.handleTap`。**未処理の申請が手元にあれば承認/却下ダイアログ、それ以外は詳細ダイアログ**を開く。消去は一覧の行の × と詳細の「このお知らせを消去」の2箇所からで、どちらも `showConfirmDeleteDialog` で確認してから `NotificationRegistry.remove` を呼ぶ。一覧の左上の「すべて消去」は `removeAll` → `NotificationService.deleteAll`(`recipient_id` で絞った1回の delete)。**一覧は直近50件しか取っていないので、手元に無い古い通知もここで消える**。`remove` は表示を待たせないよう先に手元から外し、サーバ側の削除が失敗したら元の位置に戻して例外を投げ直す(`markRead` と違い、消えたはずの通知が黙って復活するほうが分かりにくいため)。
 
 起動時取得は `auth_gate.dart` → `SessionBridge.hydrate`、購読の開始と解除も `SessionBridge` が持つ。Realtime が繋がらなくても起動時取得がフォールバックになる。
 
@@ -78,7 +92,7 @@
 判断は親の端末で走るので、通知が届いた時点が子どもにとって結果を知る最初のタイミングになる。`NotificationRealtime._applySideEffects` がここで手元の状態を直す。
 
 - `quest_approved` … 申請を取り下げ、承認済みの `QuestItem` を消し、`point_balance` で残高を更新する
-- `quest_rejected` … 申請だけ取り下げる。`tasks` 行は `open` のまま残るのでクエスト自体は消さず、もう一度「達成」を押せるようにする
+- `quest_rejected` … 手元の申請だけ取り下げる。`tasks` 行は `open` のまま残るのでクエスト自体は消さず、もう一度「達成」を押せるようにする
 - `reward_approved` … 申請を取り下げ、`always_visible` でなければプレゼントを消し、残高を更新する
 - `reward_rejected` … 申請だけ取り下げる
 - `activity_approved` … ここでは何もしない。増えたクエストは `ActivityRealtime` が `tasks` を取り直して反映する
@@ -94,7 +108,7 @@
 ## テスト
 
 - `test/services/notification_messages_test.dart` — `kind` + payload → 文面の純粋関数テスト
-- `test/services/notification_registry_test.dart` — 並べ替え・重複排除・既読・`unreadCount`
+- `test/services/notification_registry_test.dart` — 並べ替え・重複排除・既読・`unreadCount`・`remove` / `removeAll` の差し戻し
 
 `NotificationService` / `NotificationRealtime` は Supabase を直接叩くので、実際に呼ぶ操作までは踏み込まない(`home_body_test.dart` と同じ割り切り)。
 
@@ -102,5 +116,6 @@
 
 - **アプリを終了している間の通知は取りこぼす**。次回ログイン時の一覧取得で読めるが、OS通知は出ない。解消するには FCM の導入が必要
 - **既読は端末をまたいで共有される**。`read_at` は行そのものに持たせているため、同じアカウントを2台で使うと片方で読めばもう片方でも既読になる
-- **通知の保持期間を決めていない**。`notifications` は増え続ける。取得は直近50件に絞っているので表示は重くならないが、`purge_old_screen_time` 相当の掃除は将来必要になる
+- **通知の保持期間を決めていない**。1件ずつ・まとめて消せるようになったが、放っておけば `notifications` は増え続ける。取得は直近50件に絞っているので表示は重くならないが、`purge_old_screen_time` 相当の掃除は将来必要になる
+- **承認済みの申請行も、通知が消されるまで残り続ける**。片方(親か子)が通知を消さない限り申請行は消えない。上の保持期間の話と同じ性質の宿題
 - **親が複数いる場合、誰かが承認しても他の親の申請通知は未読のまま残る**。既読にできるのは承認操作をした端末だけ(`markReadByRequestId`)

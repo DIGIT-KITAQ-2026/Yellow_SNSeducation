@@ -224,7 +224,7 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 | 列 | 型 | 制約 | 説明 |
 |---|---|---|---|
 | `id` | uuid | PK | |
-| `task_id` | uuid | not null → `tasks(id)` on delete cascade | |
+| `task_id` | uuid | → `tasks(id)` **on delete set null**(0019で cascade から変更) | 承認で `tasks` が消えると null になる |
 | `child_id` | uuid | not null → `profiles(id)` | 申請した子 |
 | `status` | `request_status` | not null, default `pending` | |
 | `requested_at` | timestamptz | not null, default `now()` | |
@@ -232,8 +232,8 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 | `decided_at` | timestamptz | | |
 
 - **部分unique index `(task_id) where status = 'pending'`** … 1つのタスクに対して同時に複数の申請が並ばないようにする(1タスク1子なので task_id だけで足りる)
-- 却下された後は再申請できる(`rejected` は部分indexの対象外のため)
-- 承認されると `tasks` の削除に cascade されてこの行も消える。**同じ `task_id` に過去の却下済み申請があれば、それも一緒に削除される**(`status = 'approved'` / `decided_by` / `decided_at` は列としては残すが、承認された行は削除されるため実際には残らない)
+- **却下されると、この行は即削除される**(0019)。同じタスクにもう一度申請できる
+- **承認されると `status = 'approved'` で残る**(0019)。`tasks` は従来どおり削除されるが、`task_id` が `on delete set null` になったのでこの行は生き延びる。「何を了承したか」をお知らせの詳細から辿るための控えで、親子とも通知を消した時点で `trg_cleanup_request_on_notification_delete` が片付ける。詳細は [notifications.md](notifications.md#申請行の寿命0019)
 
 ### `rewards` — プレゼント(子どもごと)
 
@@ -260,7 +260,7 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 
 ### `reward_redemptions` — 交換申請 兼 交換履歴
 
-子どもの交換申請(`pending`)から、親の承認/却下までを1行で管理する。`task_requests` と違い、承認後にこの行自体が削除されるかどうかは `rewards.always_visible` に依存する(下記参照)。
+子どもの交換申請(`pending`)から、親の承認/却下までを1行で管理する。
 
 | 列 | 型 | 制約 | 説明 |
 |---|---|---|---|
@@ -275,10 +275,11 @@ Supabase Auth の `auth.users` と1対1。`id` は `auth.users.id` と同一値�
 | `redeemed_at` | timestamptz | not null, default `now()` | 申請日時 |
 
 - **部分unique index `(reward_id) where status = 'pending'`** … `task_requests` と同様、1つのプレゼントに同時に複数の申請が並ばないようにする
-- 却下された後は再申請できる(`rejected` は部分indexの対象外のため)
-- **承認時の行の扱い**: `approve_reward_request` が `rewards.always_visible` を見て分岐する
-  - `always_visible = false` → `rewards` 行ごと物理削除(この `reward_redemptions` 行は `on delete set null` で `reward_id` が null になって残る = 交換履歴として残る)
-  - `always_visible = true` → `rewards` 行は残す。**`reward_redemptions` 行だけ削除**(`point_entries.redemption_id` が `on delete set null` で null になるが、台帳の記録自体は残る)。つまりこのケースでは交換履歴として `reward_redemptions` には残らない
+- **却下されると、この行は即削除される**(0019)。同じプレゼントにもう一度申請できる
+- **承認時の行の扱い**: `always_visible` に関わらず `status = 'approved'` で残る(0019)。分岐するのは `rewards` 本体を消すかどうかだけ
+  - `always_visible = false` → `rewards` 行ごと物理削除(この行は `on delete set null` で `reward_id` が null になって残る)
+  - `always_visible = true` → `rewards` 行も残り、何度でも交換申請できる
+- 承認済みの行は、親子とも通知を消した時点で `trg_cleanup_request_on_notification_delete` が片付ける(`point_entries.redemption_id` は `on delete set null` なので台帳の記録は残る)
 - 名称と必要ポイントをスナップショットしているため、親がプレゼントを編集・削除しても「あのとき何を何ポイントで交換したか」は(残っている場合)正しく分かる
 
 ### `point_entries` — ポイント台帳
@@ -407,14 +408,14 @@ select purge_old_screen_time();
 |---|---|---|---|
 | `create_parent_account` | [0002](../supabase/migrations/0002_profiles.sql) | `group_name`, `parent_display_name` | グループ作成 + 親プロフィール作成。`(group_id, group_code)` を返す |
 | `join_group` | [0002](../supabase/migrations/0002_profiles.sql) | `code`, `child_display_name` | コードでグループを探し、子プロフィールを作成。`group_id` を返す |
-| `approve_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0010](../supabase/migrations/0010_delete_task_on_approve.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 台帳に加算行 → 残高加算 → `tasks` を物理削除(cascadeで `task_requests` も削除、`point_entries.task_request_id` は null に) → 子に `quest_approved` を通知 |
-| `reject_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 申請を `rejected` に(タスクは `open` のまま = 再申請可能) → 子に `quest_rejected` を通知 |
+| `approve_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0010](../supabase/migrations/0010_delete_task_on_approve.sql)・[0017](../supabase/migrations/0017_notifications.sql)・[0019](../supabase/migrations/0019_notification_dismiss.sql)で更新 | `request_id` | 台帳に加算行 → 残高加算 → 申請を `approved` に → `tasks` を物理削除(`task_requests.task_id` は null に、申請行自体は残る) → 子に `quest_approved` を通知 |
+| `reject_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0017](../supabase/migrations/0017_notifications.sql)・[0019](../supabase/migrations/0019_notification_dismiss.sql)で更新 | `request_id` | 申請行を削除(タスクは `open` のまま = 再申請可能) → 子に `quest_rejected` を通知 |
 | `request_reward` | [0011](../supabase/migrations/0011_reward_requests.sql) | `reward_id` | 残高チェック → `reward_redemptions` に `pending` 行を作成(ポイントはまだ減らさない)。生成した申請 id を返す |
-| `approve_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 残高再チェック → 台帳に減算行 → 残高減算 → `rewards.always_visible` に応じて `reward_redemptions` 行 or `rewards` 行を削除 → 子に `reward_approved` を通知 |
-| `reject_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 申請を `rejected` に(プレゼント・ポイントとも変化なし = 再申請可能) → 子に `reward_rejected` を通知 |
+| `approve_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql)・[0017](../supabase/migrations/0017_notifications.sql)・[0019](../supabase/migrations/0019_notification_dismiss.sql)で更新 | `request_id` | 残高再チェック → 台帳に減算行 → 残高減算 → 申請を `approved` に → `always_visible` でなければ `rewards` 行を削除 → 子に `reward_approved` を通知 |
+| `reject_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql)・[0017](../supabase/migrations/0017_notifications.sql)・[0019](../supabase/migrations/0019_notification_dismiss.sql)で更新 | `request_id` | 申請行を削除(プレゼント・ポイントとも変化なし = 再申請可能) → 子に `reward_rejected` を通知 |
 | `recompute_point_balance` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `target_child_id` | 台帳から残高を再計算して返す(照合用、更新はしない) |
 | `approve_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id`, `points` | 承認者が対象の子と同じグループの親か検証 → 申請を `approved` → `tasks` を生成 → `created_task_id` にリンク → 子に `activity_approved` を通知。生成した task id を返す |
-| `reject_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 承認者が対象の子と同じグループの親か検証 → 申請を `rejected` に → 子に `activity_rejected` を通知 |
+| `reject_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)・[0017](../supabase/migrations/0017_notifications.sql)・[0019](../supabase/migrations/0019_notification_dismiss.sql)で更新 | `request_id` | 承認者が対象の子と同じグループの親か検証 → 申請行を削除 → 子に `activity_rejected` を通知 |
 | `notify_group_parents` | [0017](../supabase/migrations/0017_notifications.sql) | `p_group_id`, `p_kind`, `p_child_id`, `p_payload`, `p_dedupe_key` | 同じグループの親全員に通知を1行ずつ作る(内部用) |
 | `notify_child` | [0017](../supabase/migrations/0017_notifications.sql) | `p_child_id`, `p_kind`, `p_payload` | 特定の子に通知を1行作る(内部用) |
 | `generate_group_code` | [0001](../supabase/migrations/0001_types_and_groups.sql) | — | 未使用の4桁コードを払い出す(内部用) |
@@ -455,16 +456,17 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 | `groups` | 自分のグループのみ | — | — | — |
 | `profiles` | 同一グループ全員 | — | 本人のみ(※) | — |
 | `tasks` | **親: グループ全件 / 子: 自分宛のみ** | 親のみ | 親のみ | 親のみ |
-| `task_requests` | 子: 自分の分 / 親: グループ内 | 子が自分宛の `open` タスクに対してのみ | RPC経由のみ | — |
+| `task_requests` | 子: 自分の分 / 親: グループ内 | 子が自分宛の `open` タスクに対してのみ | RPC経由のみ | RPC・トリガー経由のみ |
 | `rewards` | 同一グループ全員 | 親のみ | 親のみ | 親のみ |
-| `reward_redemptions` | 同一グループ全員 | RPC経由のみ | RPC経由のみ | — |
+| `reward_redemptions` | 同一グループ全員 | RPC経由のみ | RPC経由のみ | RPC・トリガー経由のみ |
 | `point_entries` | 同一グループ全員 | RPC経由のみ | — | — |
 | `screen_time_daily` | 同一グループ全員 | 子本人のみ | 子本人のみ | — |
 | `screen_time_apps` | 同一グループ全員 | 子本人のみ | 子本人のみ | — |
 | `screen_time_hourly` | 同一グループ全員 | 子本人のみ | 子本人のみ | 子本人のみ |
 | `ai_reviews` | 同一グループ全員 | service role のみ | — | — |
 | `activity_suggestions` | 同一グループ全員 | service role のみ | — | — |
-| `activity_requests` | 子: 自分の分 / 親: グループ内 | 子が自分の分のみ | RPC経由のみ | — |
+| `activity_requests` | 子: 自分の分 / 親: グループ内 | 子が自分の分のみ | RPC経由のみ | RPC・トリガー経由のみ |
+| `notifications` | 自分宛のみ | RPC経由のみ | 自分宛のみ(既読) | 自分宛のみ(0019) |
 
 `activity_requests` は Supabase Realtime にも登録されている([0013](../supabase/migrations/0013_activity_fixes.sql)の `alter publication supabase_realtime add table activity_requests`)。`postgres_changes` は上記の SELECT ポリシーを通った行だけを配信するため、購読側で追加のフィルタは不要。詳細は [nearby_activities.md](nearby_activities.md#realtime) を参照。
 
@@ -506,8 +508,9 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
 親: select approve_task_request('<request_id>')
     → point_entries に +4 の行(description='宿題')
     → profiles.point_balance += 4
-    → tasks を削除(cascadeで task_requests も削除。同じタスクに対する
-      過去の却下済み申請があればそれも一緒に消える)
+    → task_requests.status = 'approved'
+    → tasks を削除(task_requests.task_id は null になるが申請行は残る。
+      親子とも通知を消した時点で申請行も片付く)
 ```
 
 ### プレゼント交換(承認フロー)
@@ -524,13 +527,14 @@ RPCは不正な状態遷移を例外で弾きます。クライアントは例�
     → 残高を再チェック(不足していれば例外で失敗、却下にはならない)
     → point_entries に -150 の行
     → profiles.point_balance -= 150
+    → reward_redemptions.status = 'approved'(always_visible に関わらず残る)
     → always_visible = false なら rewards を物理削除(1回限り)
-    → always_visible = true  なら reward_redemptions の申請行だけ削除(プレゼントは残り再交換可)
+    → always_visible = true  なら rewards は残り、何度でも再交換できる
 
   または
 
 親: select reject_reward_request('<request_id>')        -- 却下
-    → reward_redemptions.status = 'rejected'。ポイント・プレゼントとも変化なし
+    → reward_redemptions の申請行を削除。ポイント・プレゼントとも変化なし
     → 子は同じプレゼントに再度 request_reward できる
 ```
 

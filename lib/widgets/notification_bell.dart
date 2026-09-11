@@ -9,7 +9,9 @@ import '../services/notification_registry.dart';
 import '../theme/theme_controller.dart';
 import 'achievement_review_dialog.dart';
 import 'activity_review_dialog.dart';
+import 'confirm_delete_dialog.dart';
 import 'exchange_review_dialog.dart';
+import 'notification_detail_dialog.dart';
 
 /// お知らせベル。親・子どもとも、中身はサーバの `notifications` から来る
 /// 自分宛の通知一覧そのもの。
@@ -116,7 +118,49 @@ class _NotificationBellState extends State<NotificationBell> {
           // まだスタンプを押していない申請にチェックが付いてしまう。
           Future<void> handleTap(AppNotification notification) async {
             final opened = await _openReview(notification);
-            if (!opened) await NotificationRegistry.instance.markRead(notification);
+            if (!opened) {
+              // 処理済み・子ども宛の通知は「何を了承したか」を読む詳細を開く。
+              await NotificationRegistry.instance.markRead(notification);
+              if (!mounted) return;
+              await showDialog<void>(
+                context: context,
+                builder: (_) => NotificationDetailDialog(notification: notification),
+              );
+            }
+            setDialogState(() {});
+          }
+
+          Future<void> handleDelete(AppNotification notification) async {
+            final confirmed = await showConfirmDeleteDialog(
+              dialogContext,
+              message: 'このお知らせを消去しますか？',
+            );
+            if (!confirmed || !mounted) return;
+            try {
+              await NotificationRegistry.instance.remove(notification);
+            } catch (_) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('通信に失敗しました。もう一度お試しください')),
+              );
+            }
+            setDialogState(() {});
+          }
+
+          Future<void> handleDeleteAll() async {
+            final confirmed = await showConfirmDeleteDialog(
+              dialogContext,
+              message: 'お知らせをすべて消去しますか？',
+            );
+            if (!confirmed || !mounted) return;
+            try {
+              await NotificationRegistry.instance.removeAll();
+            } catch (_) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('通信に失敗しました。もう一度お試しください')),
+              );
+            }
             setDialogState(() {});
           }
 
@@ -129,12 +173,21 @@ class _NotificationBellState extends State<NotificationBell> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                    ),
+                  Row(
+                    children: [
+                      if (notifications.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: handleDeleteAll,
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                          label: const Text('すべて消去'),
+                          style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                        ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                      ),
+                    ],
                   ),
                   Text(
                     'お知らせ',
@@ -164,7 +217,7 @@ class _NotificationBellState extends State<NotificationBell> {
                           children: [
                             for (var i = 0; i < notifications.length; i++) ...[
                               if (i > 0) Divider(height: 1, color: Colors.grey.shade500),
-                              _buildRow(notifications[i], handleTap),
+                              _buildRow(notifications[i], handleTap, handleDelete),
                             ],
                           ],
                         ),
@@ -182,6 +235,7 @@ class _NotificationBellState extends State<NotificationBell> {
   Widget _buildRow(
     AppNotification notification,
     Future<void> Function(AppNotification) onTap,
+    Future<void> Function(AppNotification) onDelete,
   ) {
     final content = notificationContent(notification);
     return _NotificationRow(
@@ -190,6 +244,7 @@ class _NotificationBellState extends State<NotificationBell> {
       showCheck: notification.isRead,
       stampAssetPath: content.stampAssetPath,
       onTap: () => onTap(notification),
+      onDelete: () => onDelete(notification),
     );
   }
 
@@ -243,6 +298,7 @@ class _NotificationRow extends StatelessWidget {
     required this.showCheck,
     this.stampAssetPath,
     required this.onTap,
+    required this.onDelete,
   });
 
   final String title;
@@ -250,6 +306,7 @@ class _NotificationRow extends StatelessWidget {
   final bool showCheck;
   final String? stampAssetPath;
   final VoidCallback? onTap;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -280,6 +337,18 @@ class _NotificationRow extends StatelessWidget {
             const SizedBox(width: 6),
             Icon(Icons.check_circle, color: Colors.green.shade400, size: 18),
           ],
+          // 一覧から直接消せる導線。スワイプ削除はこのアプリに前例が無く、
+          // ListTile の onTap とも競合しないのでボタンにしてある。
+          const SizedBox(width: 2),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            color: Colors.grey.shade500,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
+            tooltip: 'このお知らせを消去',
+            onPressed: onDelete,
+          ),
         ],
       ),
     );

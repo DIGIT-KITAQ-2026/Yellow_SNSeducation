@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
-Future<bool> showConfirmDeleteDialog(BuildContext context) async {
+/// 削除の確認。[message] を省くと既定の「本当に削除しますか？」を出す。
+Future<bool> showConfirmDeleteDialog(
+  BuildContext context, {
+  String message = '本当に削除しますか？',
+}) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (_) => Dialog(
@@ -11,10 +15,10 @@ Future<bool> showConfirmDeleteDialog(BuildContext context) async {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              '本当に削除しますか？',
+            Text(
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w600),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 24),
             Row(

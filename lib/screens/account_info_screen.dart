@@ -63,83 +63,101 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     final controller = TextEditingController(text: initialValue);
     return showDialog<String>(
       context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: palette.dialogBackground,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.3 : 1)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: palette.textPrimary),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                style: TextStyle(color: palette.textPrimary),
-                decoration: InputDecoration(
-                  labelText: label,
-                  labelStyle: TextStyle(color: palette.textSecondary),
-                  filled: true,
-                  fillColor: palette.inputFill,
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: palette.inputBorder),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: palette.accent, width: 2),
-                  ),
-                  border: const OutlineInputBorder(),
+      builder:
+          (dialogContext) => Dialog(
+            backgroundColor: palette.dialogBackground,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(
+                color: palette.cardBorder.withValues(
+                  alpha: palette.isDark ? 0.3 : 1,
                 ),
               ),
-              const SizedBox(height: 20),
-              Row(
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: palette.textPrimary,
-                        side: BorderSide(color: palette.inputBorder),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('キャンセル'),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: palette.textPrimary,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: palette.accent,
-                        foregroundColor: palette.accentOn,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    style: TextStyle(color: palette.textPrimary),
+                    decoration: InputDecoration(
+                      labelText: label,
+                      labelStyle: TextStyle(color: palette.textSecondary),
+                      filled: true,
+                      fillColor: palette.inputFill,
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: palette.inputBorder),
                       ),
-                      child: const Text('保存'),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: palette.accent, width: 2),
+                      ),
+                      border: const OutlineInputBorder(),
                     ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: palette.textPrimary,
+                            side: BorderSide(color: palette.inputBorder),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('キャンセル'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed:
+                              () => Navigator.of(
+                                dialogContext,
+                              ).pop(controller.text.trim()),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: palette.accent,
+                            foregroundColor: palette.accentOn,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('保存'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
   Future<void> _renameUser(AppPalette palette) async {
     final isChild = AppSession.instance.isChild;
     final currentName =
-        isChild ? AppSession.instance.childProfile?.name : AppSession.instance.parentName;
+        isChild
+            ? AppSession.instance.childProfile?.name
+            : AppSession.instance.parentName;
     final result = await _showRenameDialog(
       palette: palette,
       title: 'ユーザー名を変更',
@@ -161,18 +179,19 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
   /// 動作確認用: 8時を待たずに、いま自分のロール向けの毎朝の通知を即時発火する。
   Future<void> _sendTestNotification() async {
     final isChild = AppSession.instance.isChild;
-    final childNames = ChildRegistry.instance
-        .childrenInGroup(AppSession.instance.groupCode)
-        .map((child) => child.name)
-        .toList();
+    final childNames =
+        ChildRegistry.instance
+            .childrenInGroup(AppSession.instance.groupCode)
+            .map((child) => child.name)
+            .toList();
     await DailyNotificationService.instance.showNow(
       isChild: isChild,
       childNames: childNames,
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('通知を送信しました')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('通知を送信しました')));
   }
 
   Future<void> _renameGroup(AppPalette palette) async {
@@ -195,16 +214,20 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
     final isChild = AppSession.instance.isChild;
     final myChildName = AppSession.instance.childProfile?.name;
     final displayName = isChild ? myChildName : AppSession.instance.parentName;
-    final avatarBytes = isChild
-        ? AppSession.instance.childProfile?.avatarBytes
-        : AppSession.instance.parentAvatar;
+    final avatarBytes =
+        isChild
+            ? AppSession.instance.childProfile?.avatarBytes
+            : AppSession.instance.parentAvatar;
     final memberRoles = [
       isChild ? '保護者' : '保護者(自分)',
-      ...ChildRegistry.instance.childrenInGroup(AppSession.instance.groupCode).map(
-        (child) => isChild && child.name == myChildName
-            ? '${child.name}(自分)'
-            : child.name,
-      ),
+      ...ChildRegistry.instance
+          .childrenInGroup(AppSession.instance.groupCode)
+          .map(
+            (child) =>
+                isChild && child.name == myChildName
+                    ? '${child.name}(自分)'
+                    : child.name,
+          ),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -231,10 +254,17 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                               radius: 40,
                               backgroundColor: palette.surfaceAlt,
                               backgroundImage:
-                                  avatarBytes != null ? MemoryImage(avatarBytes) : null,
-                              child: avatarBytes == null
-                                  ? Icon(Icons.person_outline, size: 40, color: palette.accent)
-                                  : null,
+                                  avatarBytes != null
+                                      ? MemoryImage(avatarBytes)
+                                      : null,
+                              child:
+                                  avatarBytes == null
+                                      ? Icon(
+                                        Icons.person_outline,
+                                        size: 40,
+                                        color: palette.accent,
+                                      )
+                                      : null,
                             ),
                             Positioned(
                               bottom: 0,
@@ -246,7 +276,10 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                                 decoration: BoxDecoration(
                                   color: palette.accent,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: palette.navBackground, width: 2),
+                                  border: Border.all(
+                                    color: palette.navBackground,
+                                    width: 2,
+                                  ),
                                 ),
                                 child: Icon(
                                   Icons.camera_alt,
@@ -312,17 +345,16 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'メールアドレス未設定',
-                        style: TextStyle(color: palette.textDisabled, fontSize: 12),
-                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 32),
                 Text(
                   'あなたのグループメンバー',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: palette.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Align(
@@ -333,7 +365,13 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                       child: Column(
                         children: [
                           for (var i = 0; i < memberRoles.length; i++) ...[
-                            if (i > 0) Divider(height: 1, color: palette.cardBorder.withValues(alpha: 0.3)),
+                            if (i > 0)
+                              Divider(
+                                height: 1,
+                                color: palette.cardBorder.withValues(
+                                  alpha: 0.3,
+                                ),
+                              ),
                             _MemberRow(role: memberRoles[i], palette: palette),
                           ],
                         ],
@@ -346,13 +384,18 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                   children: [
                     Text(
                       'グループコード',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: palette.textPrimary,
+                      ),
                     ),
                     const SizedBox(width: 16),
                     if (AppSession.instance.groupCode != null)
                       ...AppSession.instance.groupCode!
                           .split('')
-                          .map((digit) => _CodeDot(digit: digit, palette: palette))
+                          .map(
+                            (digit) => _CodeDot(digit: digit, palette: palette),
+                          )
                     else
                       ...List.generate(4, (_) => _CodeDot(palette: palette)),
                   ],
@@ -360,7 +403,10 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                 const SizedBox(height: 32),
                 Text(
                   '画面のテーマ',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: palette.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 _ThemePicker(palette: palette),
@@ -371,8 +417,13 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                     onPressed: _sendTestNotification,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: palette.accent,
-                      side: BorderSide(color: palette.accent.withValues(alpha: 0.6)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      side: BorderSide(
+                        color: palette.accent.withValues(alpha: 0.6),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -393,8 +444,13 @@ class _AccountInfoScreenState extends State<AccountInfoScreen> {
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.redAccent,
-                      side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.6)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      side: BorderSide(
+                        color: Colors.redAccent.withValues(alpha: 0.6),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -424,7 +480,10 @@ class _ThemePicker extends StatelessWidget {
     final child = AppSession.instance.childProfile;
     if (isChild && child == null) return const SizedBox.shrink();
 
-    final current = isChild ? ThemeController.instance.kindFor(child!) : ThemeController.instance.kindForParent();
+    final current =
+        isChild
+            ? ThemeController.instance.kindFor(child!)
+            : ThemeController.instance.kindForParent();
     void select(AppThemeKind kind) {
       if (isChild) {
         ThemeController.instance.setKind(child!, kind);
@@ -516,12 +575,21 @@ class _ThemeOptionCard extends StatelessWidget {
           color: previewBackground,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: selected ? previewColor : palette.cardBorder.withValues(alpha: 0.3),
+            color:
+                selected
+                    ? previewColor
+                    : palette.cardBorder.withValues(alpha: 0.3),
             width: selected ? 2 : 1,
           ),
-          boxShadow: selected
-              ? [BoxShadow(color: previewColor.withValues(alpha: 0.4), blurRadius: 10)]
-              : null,
+          boxShadow:
+              selected
+                  ? [
+                    BoxShadow(
+                      color: previewColor.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                    ),
+                  ]
+                  : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,7 +598,8 @@ class _ThemeOptionCard extends StatelessWidget {
               children: [
                 Icon(icon, color: previewColor, size: 20),
                 const Spacer(),
-                if (selected) Icon(Icons.check_circle, color: previewColor, size: 18),
+                if (selected)
+                  Icon(Icons.check_circle, color: previewColor, size: 18),
               ],
             ),
             const SizedBox(height: 8),
@@ -538,7 +607,10 @@ class _ThemeOptionCard extends StatelessWidget {
               label,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: previewBackground.computeLuminance() > 0.5 ? Colors.black87 : Colors.white,
+                color:
+                    previewBackground.computeLuminance() > 0.5
+                        ? Colors.black87
+                        : Colors.white,
               ),
             ),
             const SizedBox(height: 2),
@@ -546,9 +618,10 @@ class _ThemeOptionCard extends StatelessWidget {
               description,
               style: TextStyle(
                 fontSize: 11,
-                color: previewBackground.computeLuminance() > 0.5
-                    ? Colors.black54
-                    : Colors.white60,
+                color:
+                    previewBackground.computeLuminance() > 0.5
+                        ? Colors.black54
+                        : Colors.white60,
               ),
             ),
           ],
@@ -570,7 +643,13 @@ class _MemberRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Text(role, style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary)),
+          Text(
+            role,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: palette.textPrimary,
+            ),
+          ),
           const SizedBox(width: 8),
           CircleAvatar(
             radius: 14,
@@ -600,13 +679,23 @@ class _CodeDot extends StatelessWidget {
         shape: BoxShape.circle,
         color: digit != null ? palette.accent.withValues(alpha: 0.12) : null,
         border: Border.all(
-          color: digit != null ? palette.accent : palette.cardBorder.withValues(alpha: 0.5),
+          color:
+              digit != null
+                  ? palette.accent
+                  : palette.cardBorder.withValues(alpha: 0.5),
           width: 2,
         ),
       ),
-      child: digit != null
-          ? Text(digit!, style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary))
-          : null,
+      child:
+          digit != null
+              ? Text(
+                digit!,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: palette.textPrimary,
+                ),
+              )
+              : null,
     );
   }
 }

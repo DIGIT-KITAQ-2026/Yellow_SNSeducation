@@ -76,6 +76,31 @@ void main() {
     expect(byId['b']!.isRead, isFalse);
   });
 
+  test('remove はサーバ削除が失敗したら元の位置に戻す', () async {
+    registry.replaceAll([
+      _notification('new', createdAt: DateTime(2026, 9, 10)),
+      _notification('mid', createdAt: DateTime(2026, 9, 5)),
+      _notification('old', createdAt: DateTime(2026, 9, 1)),
+    ]);
+
+    // Supabase を初期化していないので NotificationService.delete は必ず失敗する。
+    // 消えたはずの通知が黙って残るほうが分かりにくいので、例外は投げ直す。
+    await expectLater(registry.remove(registry.notifications[1]), throwsA(anything));
+
+    expect([for (final n in registry.notifications) n.id], ['new', 'mid', 'old']);
+  });
+
+  test('removeAll はサーバ削除が失敗したら一覧を元に戻す', () async {
+    registry.replaceAll([
+      _notification('new', createdAt: DateTime(2026, 9, 10)),
+      _notification('old', createdAt: DateTime(2026, 9, 1)),
+    ]);
+
+    await expectLater(registry.removeAll(), throwsA(anything));
+
+    expect([for (final n in registry.notifications) n.id], ['new', 'old']);
+  });
+
   test('clear で空になる', () {
     registry.replaceAll([_notification('a')]);
     registry.clear();

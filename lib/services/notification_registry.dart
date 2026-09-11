@@ -62,6 +62,41 @@ class NotificationRegistry extends ChangeNotifier {
     }
   }
 
+  /// 1件消す。表示を待たせたくないので先に手元から外し、サーバ側の削除が
+  /// 失敗したら元の位置に戻す([markRead] と違って、消えたはずの通知が次の
+  /// ログインで復活するほうが分かりにくいため、失敗は握り潰さず投げ直す)。
+  Future<void> remove(AppNotification notification) async {
+    final index = _notifications.indexWhere((n) => n.id == notification.id);
+    if (index < 0) return;
+    _notifications.removeAt(index);
+    notifyListeners();
+    try {
+      await NotificationService.delete(notification.id);
+    } catch (err) {
+      debugPrint('NotificationRegistry.remove failed: $err');
+      _notifications.insert(index, notification);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// 自分宛の通知をまとめて消す。[remove] と同じく、失敗したら手元の一覧を
+  /// 元に戻して例外を投げ直す。
+  Future<void> removeAll() async {
+    if (_notifications.isEmpty) return;
+    final backup = List<AppNotification>.from(_notifications);
+    _notifications.clear();
+    notifyListeners();
+    try {
+      await NotificationService.deleteAll();
+    } catch (err) {
+      debugPrint('NotificationRegistry.removeAll failed: $err');
+      _notifications.addAll(backup);
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   /// Drops every cached notification. Used on sign-out (前のアカウントの通知が
   /// 通知ベルに残らないようにする)。
   void clear() {
