@@ -9,6 +9,7 @@ import '../widgets/ai_commentary_card.dart';
 import '../widgets/dopagaki_index_card.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/screen_time_card.dart';
+import '../widgets/session_refresh_indicator.dart';
 
 class HomeBody extends StatefulWidget {
   const HomeBody({super.key});
@@ -79,15 +80,19 @@ class _HomeBodyState extends State<HomeBody> {
                 final needsPermission = registry.screenTimeNeedsPermission(child);
                 final dopagakiIndex = registry.dopagakiIndexFor(child);
 
-                return RefreshIndicator(
-                  onRefresh: () => registry.refreshScreenTime(child),
+                return SessionRefreshIndicator(
+                  onAlsoRefresh: () => registry.refreshScreenTime(child),
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        DopagakiIndexCard(index: dopagakiIndex, isLoading: loadingScreenTime),
+                        DopagakiIndexCard(
+                          index: dopagakiIndex,
+                          isLoading: loadingScreenTime,
+                          isParent: !AppSession.instance.isChild,
+                        ),
                         const SizedBox(height: 16),
                         ScreenTimeCard(
                           days: days,

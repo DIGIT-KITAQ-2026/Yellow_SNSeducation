@@ -31,6 +31,21 @@ class _AchievementReviewDialogState extends State<AchievementReviewDialog> {
     }
   }
 
+  Future<void> _reject() async {
+    setState(() => _submitting = true);
+    try {
+      await AchievementRequestRegistry.instance.reject(widget.request);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('通信に失敗しました。もう一度お試しください')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final request = widget.request;
@@ -108,6 +123,21 @@ class _AchievementReviewDialogState extends State<AchievementReviewDialog> {
                   ),
                 ),
                 child: const Text('完了'),
+              ),
+            ],
+            if (!request.stamped && !_tapped) ...[
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: _submitting ? null : _reject,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: const BorderSide(color: Colors.redAccent),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('却下'),
               ),
             ],
           ],

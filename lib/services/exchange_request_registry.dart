@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/child_profile.dart';
 import '../models/exchange_request.dart';
 import '../models/gift_item.dart';
-import 'child_notification_registry.dart';
 import 'child_registry.dart';
 import 'gift_service.dart';
+import 'notification_registry.dart';
 
 class ExchangeRequestRegistry extends ChangeNotifier {
   ExchangeRequestRegistry._();
@@ -53,11 +55,9 @@ class ExchangeRequestRegistry extends ChangeNotifier {
     if (!request.item.alwaysVisible) {
       request.childProfile.giftItems.remove(request.item);
     }
-    ChildNotificationRegistry.instance.add(
-      request.childProfile,
-      '保護者から交換認証スタンプが押されました。${request.item.points}Pが引かれました。',
-      stampAssetPath: 'assets/images/exchange_stamp.png',
-    );
+    // 子どもへの通知は approve_reward_request RPC がサーバ側で作る。ここで
+    // 作ると親の端末にしか残らない(この端末には子どもは居ない)。
+    unawaited(NotificationRegistry.instance.markReadByRequestId(request.id!));
     notifyListeners();
   }
 
@@ -66,11 +66,18 @@ class ExchangeRequestRegistry extends ChangeNotifier {
     await GiftService.rejectRequest(request.id!);
 
     _requests.remove(request);
-    ChildNotificationRegistry.instance.add(
-      request.childProfile,
-      '${request.item.title}との交換申請が却下されました。',
-    );
+    unawaited(NotificationRegistry.instance.markReadByRequestId(request.id!));
     notifyListeners();
+  }
+
+  /// 子ども側で、親の判断を伝える通知を受けて手元の申請を取り下げる。
+  /// 取り下げた申請を返す(承認時に対応する [GiftItem] を消すため)。
+  ExchangeRequest? removeById(String requestId) {
+    final index = _requests.indexWhere((request) => request.id == requestId);
+    if (index < 0) return null;
+    final removed = _requests.removeAt(index);
+    notifyListeners();
+    return removed;
   }
 
   /// Drops every cached request. Used on sign-out (前のアカウントの申請が

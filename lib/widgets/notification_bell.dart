@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 
-import '../models/achievement_request.dart';
-import '../models/activity_request.dart';
-import '../models/child_notification.dart';
-import '../models/exchange_request.dart';
+import '../models/app_notification.dart';
 import '../services/achievement_request_registry.dart';
 import '../services/activity_request_registry.dart';
-import '../services/app_session.dart';
-import '../services/child_notification_registry.dart';
 import '../services/exchange_request_registry.dart';
+import '../services/notification_messages.dart';
+import '../services/notification_registry.dart';
 import '../theme/theme_controller.dart';
 import 'achievement_review_dialog.dart';
 import 'activity_review_dialog.dart';
 import 'exchange_review_dialog.dart';
 
+/// お知らせベル。親・子どもとも、中身はサーバの `notifications` から来る
+/// 自分宛の通知一覧そのもの。
+///
+/// 親が申請の通知をタップしたときだけ、`request_id` から未処理の申請を引いて
+/// 承認/却下ダイアログを開く。申請そのものを持っているのは従来どおり
+/// [AchievementRequestRegistry] などで、ここは一覧表示だけを担う。
 class NotificationBell extends StatefulWidget {
   const NotificationBell({super.key});
 
@@ -25,19 +28,13 @@ class _NotificationBellState extends State<NotificationBell> {
   @override
   void initState() {
     super.initState();
-    AchievementRequestRegistry.instance.addListener(_handleChange);
-    ExchangeRequestRegistry.instance.addListener(_handleChange);
-    ActivityRequestRegistry.instance.addListener(_handleChange);
-    ChildNotificationRegistry.instance.addListener(_handleChange);
+    NotificationRegistry.instance.addListener(_handleChange);
     ThemeController.instance.addListener(_handleChange);
   }
 
   @override
   void dispose() {
-    AchievementRequestRegistry.instance.removeListener(_handleChange);
-    ExchangeRequestRegistry.instance.removeListener(_handleChange);
-    ActivityRequestRegistry.instance.removeListener(_handleChange);
-    ChildNotificationRegistry.instance.removeListener(_handleChange);
+    NotificationRegistry.instance.removeListener(_handleChange);
     ThemeController.instance.removeListener(_handleChange);
     super.dispose();
   }
@@ -46,138 +43,50 @@ class _NotificationBellState extends State<NotificationBell> {
 
   String _formatDate(DateTime date) => '${date.month}/${date.day}';
 
-  List<AchievementRequest> get _achievementRequests =>
-      AchievementRequestRegistry.instance.requests;
+  List<AppNotification> get _notifications => NotificationRegistry.instance.notifications;
 
-  List<ExchangeRequest> get _exchangeRequests =>
-      ExchangeRequestRegistry.instance.requests;
+  /// 申請の通知をタップしたときに開く承認/却下ダイアログ。まだ未処理の申請が
+  /// 手元にある場合だけ開き、処理済み(親が別の場所で判断した後など)なら
+  /// 既読にするだけにする。
+  Future<void> _openReview(AppNotification notification) async {
+    final requestId = notification.requestId;
+    if (requestId == null) return;
 
-  List<ActivityRequest> get _activityRequests =>
-      ActivityRequestRegistry.instance.requests;
+    Widget? dialog;
+    switch (notification.kind) {
+      case 'quest_request':
+        final request = AchievementRequestRegistry.instance.requests
+            .where((r) => r.id == requestId && !r.stamped)
+            .firstOrNull;
+        if (request != null) dialog = AchievementReviewDialog(request: request);
+      case 'reward_request':
+        final request = ExchangeRequestRegistry.instance.requests
+            .where((r) => r.id == requestId && !r.stamped)
+            .firstOrNull;
+        if (request != null) dialog = ExchangeReviewDialog(request: request);
+      case 'activity_request':
+        final request = ActivityRequestRegistry.instance.requests
+            .where((r) => r.id == requestId && !r.stamped)
+            .firstOrNull;
+        if (request != null) dialog = ActivityReviewDialog(request: request);
+    }
+    if (dialog == null) return;
 
-  List<ChildNotification> get _childNotifications {
-    final childProfile = AppSession.instance.childProfile;
-    return ChildNotificationRegistry.instance.notifications
-        .where((n) => n.childProfile == childProfile)
-        .toList();
+    await showDialog<void>(context: context, builder: (_) => dialog!);
   }
 
-  void _openParentNotifications() {
+  void _openNotifications() {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final achievementRequests = _achievementRequests;
-          final exchangeRequests = _exchangeRequests;
-          final activityRequests = _activityRequests;
+          final notifications = _notifications;
 
-          Future<void> openAchievement(AchievementRequest request) async {
-            await showDialog<void>(
-              context: context,
-              builder: (_) => AchievementReviewDialog(request: request),
-            );
+          Future<void> handleTap(AppNotification notification) async {
+            await NotificationRegistry.instance.markRead(notification);
+            await _openReview(notification);
             setDialogState(() {});
           }
-
-          Future<void> openExchange(ExchangeRequest request) async {
-            await showDialog<void>(
-              context: context,
-              builder: (_) => ExchangeReviewDialog(request: request),
-            );
-            setDialogState(() {});
-          }
-
-          Future<void> openActivity(ActivityRequest request) async {
-            await showDialog<void>(
-              context: context,
-              builder: (_) => ActivityReviewDialog(request: request),
-            );
-            setDialogState(() {});
-          }
-
-          return Dialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                    ),
-                  ),
-                  Text(
-                    'お知らせ',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 16),
-                  if (achievementRequests.isEmpty &&
-                      exchangeRequests.isEmpty &&
-                      activityRequests.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                        child: Text(
-                          'お知らせはありません',
-                          style: TextStyle(color: Colors.black87),
-                        ),
-                      ),
-                    )
-                  else ...[
-                    for (final row in [
-                      ...achievementRequests.map(
-                        (request) => _NotificationRow(
-                          title: '${request.childProfile.name}から達成申請をされました。',
-                          date: _formatDate(request.createdAt),
-                          showCheck: request.stamped,
-                          onTap: () => openAchievement(request),
-                        ),
-                      ),
-                      ...exchangeRequests.map(
-                        (request) => _NotificationRow(
-                          title: '${request.childProfile.name}から交換申請をされました。',
-                          date: _formatDate(request.createdAt),
-                          showCheck: request.stamped,
-                          onTap: () => openExchange(request),
-                        ),
-                      ),
-                      ...activityRequests.map(
-                        (request) => _NotificationRow(
-                          title: '${request.childProfile.name}からおでかけ申請をされました。',
-                          date: _formatDate(request.createdAt),
-                          showCheck: request.stamped,
-                          onTap: () => openActivity(request),
-                        ),
-                      ),
-                    ].asMap().entries) ...[
-                      if (row.key > 0) Divider(height: 1, color: Colors.grey.shade500),
-                      row.value,
-                    ],
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _openChildNotifications() {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) {
-          final notifications = _childNotifications;
 
           return Dialog(
             backgroundColor: Colors.white,
@@ -205,8 +114,8 @@ class _NotificationBellState extends State<NotificationBell> {
                   ),
                   const SizedBox(height: 16),
                   if (notifications.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
                       child: Center(
                         child: Text(
                           'お知らせはありません',
@@ -215,19 +124,20 @@ class _NotificationBellState extends State<NotificationBell> {
                       ),
                     )
                   else
-                    for (var i = 0; i < notifications.length; i++) ...[
-                      if (i > 0) Divider(height: 1, color: Colors.grey.shade500),
-                      _NotificationRow(
-                        title: notifications[i].message,
-                        date: _formatDate(notifications[i].createdAt),
-                        showCheck: notifications[i].read,
-                        stampAssetPath: notifications[i].stampAssetPath,
-                        onTap: () {
-                          ChildNotificationRegistry.instance.markRead(notifications[i]);
-                          setDialogState(() {});
-                        },
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var i = 0; i < notifications.length; i++) ...[
+                              if (i > 0) Divider(height: 1, color: Colors.grey.shade500),
+                              _buildRow(notifications[i], handleTap),
+                            ],
+                          ],
+                        ),
                       ),
-                    ],
+                    ),
                 ],
               ),
             ),
@@ -237,17 +147,26 @@ class _NotificationBellState extends State<NotificationBell> {
     );
   }
 
+  Widget _buildRow(
+    AppNotification notification,
+    Future<void> Function(AppNotification) onTap,
+  ) {
+    final content = notificationContent(notification);
+    return _NotificationRow(
+      title: content.title,
+      date: _formatDate(notification.createdAt),
+      showCheck: notification.isRead,
+      stampAssetPath: content.stampAssetPath,
+      onTap: () => onTap(notification),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = ThemeController.instance.currentPalette;
-    final isChild = AppSession.instance.isChild;
-    final unreadCount = isChild
-        ? _childNotifications.where((n) => !n.read).length
-        : _achievementRequests.where((r) => !r.stamped).length +
-            _exchangeRequests.where((r) => !r.stamped).length +
-            _activityRequests.where((r) => !r.stamped).length;
+    final unreadCount = NotificationRegistry.instance.unreadCount;
     return InkWell(
-      onTap: isChild ? _openChildNotifications : _openParentNotifications,
+      onTap: _openNotifications,
       customBorder: const CircleBorder(),
       child: SizedBox(
         width: 36,

@@ -1,11 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/activity_request.dart';
 import '../models/activity_suggestion.dart';
 import '../models/child_profile.dart';
 import 'activity_service.dart';
-import 'child_notification_registry.dart';
 import 'child_registry.dart';
+import 'notification_registry.dart';
 
 class ActivityRequestRegistry extends ChangeNotifier {
   ActivityRequestRegistry._();
@@ -74,11 +76,9 @@ class ActivityRequestRegistry extends ChangeNotifier {
 
     request.stamped = true;
     request.childProfile.questItems.add(created);
-    ChildNotificationRegistry.instance.add(
-      request.childProfile,
-      '「${request.title}」のおでかけが承認され、クエストに追加されました。(${points}P)',
-      stampAssetPath: 'assets/images/checked_stamp.png',
-    );
+    // 子どもへの通知は approve_activity_request RPC がサーバ側で作る。ここで
+    // 作ると親の端末にしか残らない(この端末には子どもは居ない)。
+    unawaited(NotificationRegistry.instance.markReadByRequestId(request.id!));
     notifyListeners();
   }
 
@@ -87,10 +87,7 @@ class ActivityRequestRegistry extends ChangeNotifier {
     await ActivityService.rejectRequest(request.id!);
 
     _requests.remove(request);
-    ChildNotificationRegistry.instance.add(
-      request.childProfile,
-      '「${request.title}」のおでかけ申請は承認されませんでした。',
-    );
+    unawaited(NotificationRegistry.instance.markReadByRequestId(request.id!));
     notifyListeners();
   }
 

@@ -1,3 +1,4 @@
+import '../models/app_notification.dart';
 import '../models/child_profile.dart';
 import '../models/gift_item.dart';
 import '../models/quest_item.dart';
@@ -10,6 +11,8 @@ import 'activity_service.dart';
 import 'app_session.dart';
 import 'child_registry.dart';
 import 'exchange_request_registry.dart';
+import 'notification_realtime.dart';
+import 'notification_registry.dart';
 import 'screen_time_registry.dart';
 
 /// Bridges the Supabase-backed [UserProfile] onto the UI lineage's global
@@ -27,7 +30,9 @@ class SessionBridge {
     List<({String id, String childId, QuestItem item})> pendingRequests = const [],
     List<({String id, String childId, GiftItem item})> pendingExchangeRequests = const [],
     List<PendingActivityRequestRow> pendingActivityRequests = const [],
+    List<AppNotification> notifications = const [],
     String? email,
+    bool subscribeRealtime = true,
   }) {
     // children はそのまま ChildRegistry.replaceGroupChildren に渡す
     // (id/name/points/quests/gifts を保ったまま)。
@@ -62,12 +67,20 @@ class SessionBridge {
     ExchangeRequestRegistry.instance.replaceAll(pendingExchangeRequests);
     ActivityRequestRegistry.instance.replaceAll(pendingActivityRequests);
 
-    // アクティビティ申請だけは Realtime で購読する(プロジェクトで唯一)。
-    // ロールを知っているのはここだけなので、hydrate の最後で開始する。
-    if (profile.role == AccountRole.parent) {
-      ActivityRealtime.instance.subscribeAsParent();
-    } else {
-      ActivityRealtime.instance.subscribeAsChild(profile.id);
+    // お知らせベルの中身。親子どちらも自分宛の行を見るだけなので分岐は要らない。
+    NotificationRegistry.instance.replaceAll(notifications);
+
+    // Realtime の購読を開始する。ロールを知っているのはここだけなので、
+    // hydrate の最後でまとめて始める。引っ張って更新のような再取得では
+    // subscribeRealtime: false で呼ばれる — 購読は既に張ってあり、張り直すと
+    // チャンネルの作り直しのぶんだけ通知を取りこぼす隙ができる。
+    if (subscribeRealtime) {
+      NotificationRealtime.instance.subscribe(profile.id);
+      if (profile.role == AccountRole.parent) {
+        ActivityRealtime.instance.subscribeAsParent();
+      } else {
+        ActivityRealtime.instance.subscribeAsChild(profile.id);
+      }
     }
   }
 
@@ -79,6 +92,8 @@ class SessionBridge {
     AchievementRequestRegistry.instance.clear();
     ExchangeRequestRegistry.instance.clear();
     ActivityRequestRegistry.instance.clear();
+    NotificationRegistry.instance.clear();
     ActivityRealtime.instance.unsubscribe();
+    NotificationRealtime.instance.unsubscribe();
   }
 }

@@ -6,12 +6,12 @@ import '../models/activity_suggestion.dart';
 import '../services/activity_request_registry.dart';
 import '../services/activity_service.dart';
 import '../services/app_session.dart';
-import '../services/child_notification_registry.dart';
 import '../services/location_service.dart';
 import '../theme/app_palette.dart';
 import '../theme/theme_controller.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/session_refresh_indicator.dart';
 
 /// 周辺アクティビティ提案画面(子どもタブ専用)。
 ///
@@ -98,7 +98,8 @@ class _ActivityBodyState extends State<ActivityBody> {
     try {
       await ActivityRequestRegistry.instance.addRequest(profile, suggestion);
       if (!mounted) return;
-      ChildNotificationRegistry.instance.add(profile, 'おでかけ申請を行いました。');
+      // 自分の操作の控えはスナックバーで足りる。お知らせ欄は「保護者から
+      // 届いたもの」だけを並べる。
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('おでかけ申請を送りました')),
       );
@@ -119,91 +120,97 @@ class _ActivityBodyState extends State<ActivityBody> {
     final palette = ThemeController.instance.currentPalette;
 
     return FuturisticBackground(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            GlassCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'SNSの時間のかわりに、近くで無料で楽しめることを探そう',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'AIの提案です。おでかけ前におうちの人と確認してください。',
-                    style: TextStyle(fontSize: 11, color: palette.textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _busy ? null : () => _search(force: _searched),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: palette.accent,
-                      disabledBackgroundColor: palette.textDisabled,
-                      foregroundColor: palette.accentOn,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text(_searched ? 'もう一度探す' : '現在地から探す'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_busy)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent)),
-              )
-            else if (_notice != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+      child: SessionRefreshIndicator(
+        // まだ「探す」を押していないうちは場所検索をしない(位置情報ダイアログと
+        // Gemini呼び出しを勝手に走らせない)。検索済みなら取り直す。
+        onAlsoRefresh: _searched ? () => _search(force: true) : null,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GlassCard(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      _notice!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: palette.textSecondary),
+                      'SNSの時間のかわりに、近くで無料で楽しめることを探そう',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
                     ),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: () => _search(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: palette.textPrimary,
-                        side: BorderSide(color: palette.accent),
+                    const SizedBox(height: 4),
+                    Text(
+                      'AIの提案です。おでかけ前におうちの人と確認してください。',
+                      style: TextStyle(fontSize: 11, color: palette.textSecondary),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _busy ? null : () => _search(force: _searched),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: palette.accent,
+                        disabledBackgroundColor: palette.textDisabled,
+                        foregroundColor: palette.accentOn,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('再試行'),
+                      child: Text(_searched ? 'もう一度探す' : '現在地から探す'),
                     ),
                   ],
                 ),
-              )
-            else if (_searched && _suggestions.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text(
-                    '近くのアクティビティが見つかりませんでした',
-                    style: TextStyle(
-                      color: palette.textDisabled,
-                      fontWeight: FontWeight.w600,
+              ),
+              const SizedBox(height: 16),
+              if (_busy)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent)),
+                )
+              else if (_notice != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Column(
+                    children: [
+                      Text(
+                        _notice!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: palette.textSecondary),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => _search(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: palette.textPrimary,
+                          side: BorderSide(color: palette.accent),
+                        ),
+                        child: const Text('再試行'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_searched && _suggestions.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      '近くのアクティビティが見つかりませんでした',
+                      style: TextStyle(
+                        color: palette.textDisabled,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              )
-            else
-              for (final suggestion in _suggestions) ...[
-                _ActivityCard(
-                  suggestion: suggestion,
-                  pending: ActivityRequestRegistry.instance.hasPendingRequestFor(suggestion.id),
-                  onRequest: () => _request(suggestion),
-                  palette: palette,
-                ),
-                const SizedBox(height: 12),
-              ],
-          ],
+                )
+              else
+                for (final suggestion in _suggestions) ...[
+                  _ActivityCard(
+                    suggestion: suggestion,
+                    pending: ActivityRequestRegistry.instance.hasPendingRequestFor(suggestion.id),
+                    onRequest: () => _request(suggestion),
+                    palette: palette,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+            ],
+          ),
         ),
       ),
     );

@@ -1,10 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/achievement_request.dart';
 import '../models/child_profile.dart';
 import '../models/quest_item.dart';
-import 'child_notification_registry.dart';
 import 'child_registry.dart';
+import 'notification_registry.dart';
 import 'quest_service.dart';
 
 class AchievementRequestRegistry extends ChangeNotifier {
@@ -54,12 +56,33 @@ class AchievementRequestRegistry extends ChangeNotifier {
     // ダイアログを閉じた直後から画面に反映させるための楽観更新に過ぎない。
     request.childProfile.points += request.item.points;
     request.childProfile.questItems.remove(request.item);
-    ChildNotificationRegistry.instance.add(
-      request.childProfile,
-      '保護者から達成認証スタンプが押されました。${request.item.points}Pが追加されました。',
-      stampAssetPath: 'assets/images/checked_stamp.png',
-    );
+    // 子どもへの通知は approve_task_request RPC がサーバ側で作る。ここで
+    // 作ると親の端末にしか残らない(この端末には子どもは居ない)。
+    unawaited(NotificationRegistry.instance.markReadByRequestId(request.id!));
     notifyListeners();
+  }
+
+  /// 却下する。交換申請の [ExchangeRequestRegistry.reject] と同じ形。
+  ///
+  /// 交換と違って `questItems` からは消さない。却下では `tasks` 行が
+  /// `status = 'open'` のまま残り、子どもはやり直して再申請できるため。
+  Future<void> reject(AchievementRequest request) async {
+    if (request.stamped) return;
+    await QuestService.rejectRequest(request.id!);
+
+    _requests.remove(request);
+    unawaited(NotificationRegistry.instance.markReadByRequestId(request.id!));
+    notifyListeners();
+  }
+
+  /// 子ども側で、親の判断を伝える通知を受けて手元の申請を取り下げる。
+  /// 取り下げた申請を返す(承認時に対応する [QuestItem] を消すため)。
+  AchievementRequest? removeById(String requestId) {
+    final index = _requests.indexWhere((request) => request.id == requestId);
+    if (index < 0) return null;
+    final removed = _requests.removeAt(index);
+    notifyListeners();
+    return removed;
   }
 
   /// Drops every cached request. Used on sign-out (前のアカウントの申請が

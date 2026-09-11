@@ -7,7 +7,6 @@ import '../models/quest_item.dart';
 import '../services/achievement_request_registry.dart';
 import '../services/activity_request_registry.dart';
 import '../services/app_session.dart';
-import '../services/child_notification_registry.dart';
 import '../services/child_registry.dart';
 import '../services/exchange_request_registry.dart';
 import '../services/quest_service.dart';
@@ -17,6 +16,7 @@ import '../widgets/confirm_delete_dialog.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/new_task_dialog.dart';
+import '../widgets/session_refresh_indicator.dart';
 
 class QuestBody extends StatefulWidget {
   const QuestBody({super.key});
@@ -144,7 +144,8 @@ class _QuestBodyState extends State<QuestBody> {
     try {
       await AchievementRequestRegistry.instance.addRequest(profile, item);
       if (!mounted) return;
-      ChildNotificationRegistry.instance.add(profile, '達成申請を行いました。');
+      // 自分の操作の控えはスナックバーで足りる。お知らせ欄は「保護者から
+      // 届いたもの」だけを並べる。
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('達成申請を送りました')),
       );
@@ -161,99 +162,102 @@ class _QuestBodyState extends State<QuestBody> {
     final isChild = AppSession.instance.isChild;
     final profile = _currentProfile;
     return FuturisticBackground(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _PointsCard(points: profile?.points ?? 0, palette: palette),
-            const SizedBox(height: 16),
-            Text(
-              'やることリスト',
-              style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
-            ),
-            const SizedBox(height: 8),
-            if (_items.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text(
-                    'やることリストはありません',
-                    style: TextStyle(
-                      color: palette.textDisabled,
-                      fontWeight: FontWeight.w600,
+      child: SessionRefreshIndicator(
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _PointsCard(points: profile?.points ?? 0, palette: palette),
+              const SizedBox(height: 16),
+              Text(
+                'やることリスト',
+                style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
+              ),
+              const SizedBox(height: 8),
+              if (_items.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      'やることリストはありません',
+                      style: TextStyle(
+                        color: palette.textDisabled,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            for (final item in _items) ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _QuestItemBar(
-                      item: item,
-                      childProfile: isChild ? profile : null,
-                      onRequestAchievement: () => _requestAchievement(item),
-                      palette: palette,
-                    ),
-                  ),
-                  if (!isChild && _isEditing) ...[
-                    const SizedBox(width: 8),
-                    _ItemEditButton(onTap: () => _openEditTaskDialog(item), palette: palette),
-                    const SizedBox(width: 8),
-                    _DeleteButton(onTap: () => _confirmDelete(item), palette: palette),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (!isChild) ...[
-              Align(
-                alignment: Alignment.centerRight,
-                child: _EditButton(
-                  onTap: () => setState(() => _isEditing = !_isEditing),
-                  palette: palette,
-                ),
-              ),
-              if (_isEditing) ...[
-                const SizedBox(height: 16),
+              for (final item in _items) ...[
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: _openNewTaskDialog,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: palette.textPrimary,
-                          side: BorderSide(color: palette.accent),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('新規作成'),
+                      child: _QuestItemBar(
+                        item: item,
+                        childProfile: isChild ? profile : null,
+                        onRequestAchievement: () => _requestAchievement(item),
+                        palette: palette,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => setState(() => _isEditing = false),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: palette.accent,
-                          foregroundColor: palette.accentOn,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('完了'),
-                      ),
-                    ),
+                    if (!isChild && _isEditing) ...[
+                      const SizedBox(width: 8),
+                      _ItemEditButton(onTap: () => _openEditTaskDialog(item), palette: palette),
+                      const SizedBox(width: 8),
+                      _DeleteButton(onTap: () => _confirmDelete(item), palette: palette),
+                    ],
                   ],
                 ),
+                const SizedBox(height: 12),
+              ],
+              if (!isChild) ...[
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _EditButton(
+                    onTap: () => setState(() => _isEditing = !_isEditing),
+                    palette: palette,
+                  ),
+                ),
+                if (_isEditing) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _openNewTaskDialog,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: palette.textPrimary,
+                            side: BorderSide(color: palette.accent),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('新規作成'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => setState(() => _isEditing = false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: palette.accent,
+                            foregroundColor: palette.accentOn,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('完了'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ],
-          ],
+          ),
         ),
       ),
     );

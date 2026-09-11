@@ -42,6 +42,12 @@ class DailyNotificationService {
   static const _scheduledNotificationId = 1;
   static const _testNotificationId = 2;
 
+  /// 申請・承認などの都度通知([showMessage])に使うID。上2つと衝突させないため
+  /// 10から始め、連続して届いても上書きし合わないよう発行のたびに進める。
+  static const _messageNotificationIdBase = 10;
+  static const _messageNotificationIdCount = 10;
+  int _messageNotificationOffset = 0;
+
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
 
@@ -138,6 +144,37 @@ class DailyNotificationService {
       );
     } catch (e) {
       debugPrint('DailyNotificationService.showNow failed: $e');
+    }
+  }
+
+  /// 任意の文面で即時通知を出す。申請・承認・スクリーンタイム更新を
+  /// [NotificationRealtime] が受け取ったときに呼ばれる。
+  ///
+  /// FCM を入れていないので、これが届くのはアプリが起動している間だけ。
+  /// 出せなくてもアプリ内のお知らせベルには載るため、失敗は握りつぶす。
+  Future<void> showMessage({required String title, required String body}) async {
+    if (!_supported) return;
+    try {
+      await init();
+
+      // 直前の通知を上書きしないよう、IDを一定の範囲で使い回す。
+      final id = _messageNotificationIdBase +
+          (_messageNotificationOffset++ % _messageNotificationIdCount);
+
+      await _plugin.show(
+        id,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            channelDescription: _channelDescription,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('DailyNotificationService.showMessage failed: $e');
     }
   }
 

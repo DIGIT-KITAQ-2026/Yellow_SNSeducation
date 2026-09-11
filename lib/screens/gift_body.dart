@@ -4,7 +4,6 @@ import '../models/child_profile.dart';
 import '../models/gift_item.dart';
 import '../services/achievement_request_registry.dart';
 import '../services/app_session.dart';
-import '../services/child_notification_registry.dart';
 import '../services/child_registry.dart';
 import '../services/exchange_request_registry.dart';
 import '../services/gift_service.dart';
@@ -15,6 +14,7 @@ import '../widgets/confirm_exchange_dialog.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/new_gift_dialog.dart';
+import '../widgets/session_refresh_indicator.dart';
 
 class GiftBody extends StatefulWidget {
   const GiftBody({super.key});
@@ -169,7 +169,8 @@ class _GiftBodyState extends State<GiftBody> {
     try {
       await ExchangeRequestRegistry.instance.addRequest(profile, item);
       if (!mounted) return;
-      ChildNotificationRegistry.instance.add(profile, '交換申請を行いました。');
+      // 自分の操作の控えはスナックバーで足りる。お知らせ欄は「保護者から
+      // 届いたもの」だけを並べる。
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('交換申請を送りました')),
       );
@@ -186,100 +187,103 @@ class _GiftBodyState extends State<GiftBody> {
     final isChild = AppSession.instance.isChild;
     final profile = _currentProfile;
     return FuturisticBackground(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _PointsCard(points: profile?.points ?? 0, palette: palette),
-            const SizedBox(height: 16),
-            Text(
-              'ご褒美リスト',
-              style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
-            ),
-            const SizedBox(height: 8),
-            if (_items.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text(
-                    'ご褒美はまだありません',
-                    style: TextStyle(
-                      color: palette.textDisabled,
-                      fontWeight: FontWeight.w600,
+      child: SessionRefreshIndicator(
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _PointsCard(points: profile?.points ?? 0, palette: palette),
+              const SizedBox(height: 16),
+              Text(
+                'ご褒美リスト',
+                style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
+              ),
+              const SizedBox(height: 8),
+              if (_items.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      'ご褒美はまだありません',
+                      style: TextStyle(
+                        color: palette.textDisabled,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              )
-            else
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.95,
-                children: [
-                  for (final item in _items)
-                    _GiftItemCard(
-                      item: item,
-                      isEditing: !isChild && _isEditing,
-                      onEdit: () => _openEditGiftDialog(item),
-                      onDelete: () => _handleDelete(item),
-                      onToggleAlwaysVisible: () => _toggleAlwaysVisible(item),
-                      childProfile: isChild ? profile : null,
-                      onRequestExchange: () => _requestExchange(item),
-                      palette: palette,
-                    ),
-                ],
-              ),
-            if (!isChild) ...[
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _EditButton(
-                  onTap: () => setState(() => _isEditing = !_isEditing),
-                  palette: palette,
-                ),
-              ),
-              if (_isEditing) ...[
-                const SizedBox(height: 16),
-                Row(
+                )
+              else
+                GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.95,
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _openNewGiftDialog,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: palette.textPrimary,
-                          side: BorderSide(color: palette.accent),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('新規作成'),
+                    for (final item in _items)
+                      _GiftItemCard(
+                        item: item,
+                        isEditing: !isChild && _isEditing,
+                        onEdit: () => _openEditGiftDialog(item),
+                        onDelete: () => _handleDelete(item),
+                        onToggleAlwaysVisible: () => _toggleAlwaysVisible(item),
+                        childProfile: isChild ? profile : null,
+                        onRequestExchange: () => _requestExchange(item),
+                        palette: palette,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => setState(() => _isEditing = false),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: palette.accent,
-                          foregroundColor: palette.accentOn,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('完了'),
-                      ),
-                    ),
                   ],
                 ),
+              if (!isChild) ...[
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _EditButton(
+                    onTap: () => setState(() => _isEditing = !_isEditing),
+                    palette: palette,
+                  ),
+                ),
+                if (_isEditing) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _openNewGiftDialog,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: palette.textPrimary,
+                            side: BorderSide(color: palette.accent),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('新規作成'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => setState(() => _isEditing = false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: palette.accent,
+                            foregroundColor: palette.accentOn,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('完了'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -385,6 +385,18 @@ select purge_old_screen_time();
 `id`, `suggestion_id`(on delete set null), `child_id`, `title` / `description`(スナップショット), `status`, `points`(親が承認時に設定), `created_task_id`(生成された `tasks` へのリンク), `decided_by`, `decided_at`, `requested_at`
 - **部分unique index `(child_id, suggestion_id) where status = 'pending'`**(0013で追加) … 同じ提案への同時申請を防ぐ。却下後は再申請できる(`rejected` は対象外)
 
+### `notifications` — お知らせ
+
+親子それぞれの「お知らせ」ベルの中身。詳細な仕様は [notifications.md](notifications.md) を参照。
+
+`id`, `recipient_id`(受信者。必ず具体的な `profiles.id`), `group_id`, `kind`, `child_id`(誰についての通知か), `payload` jsonb, `dedupe_key`, `read_at`, `created_at`
+
+- **行を作るのはサーバだけ**。申請は3つの申請テーブルの AFTER INSERT トリガー、承認/却下は各 RPC の中。INSERT ポリシーを作っていないので、クライアントからは作れない
+- **表示文面は持たない**。`kind` と `payload`(`child_name` / `item_title` / `points` / `point_balance` / `date`)だけを保存し、日本語の組み立ては Dart 側(`lib/services/notification_messages.dart`)が行う
+- グループに親が複数いる場合は**親の人数ぶんファンアウト**する(既読を受信者ごとに持つため)
+- **部分unique index `(recipient_id, dedupe_key) where dedupe_key is not null`** … 同じ出来事で何度も鳴らさないための重複排除。スクリーンタイム更新が `screen_time:<child_id>:<date>` で使う
+- `supabase_realtime` publication に追加済み。各端末は `recipient_id = 自分` でフィルタして購読する
+
 ---
 
 ## RPC(状態変更はすべてここを通す)
@@ -395,14 +407,16 @@ select purge_old_screen_time();
 |---|---|---|---|
 | `create_parent_account` | [0002](../supabase/migrations/0002_profiles.sql) | `group_name`, `parent_display_name` | グループ作成 + 親プロフィール作成。`(group_id, group_code)` を返す |
 | `join_group` | [0002](../supabase/migrations/0002_profiles.sql) | `code`, `child_display_name` | コードでグループを探し、子プロフィールを作成。`group_id` を返す |
-| `approve_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0010](../supabase/migrations/0010_delete_task_on_approve.sql)で更新 | `request_id` | 台帳に加算行 → 残高加算 → `tasks` を物理削除(cascadeで `task_requests` も削除、`point_entries.task_request_id` は null に) |
-| `reject_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `request_id` | 申請を `rejected` に(タスクは `open` のまま = 再申請可能) |
+| `approve_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0010](../supabase/migrations/0010_delete_task_on_approve.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 台帳に加算行 → 残高加算 → `tasks` を物理削除(cascadeで `task_requests` も削除、`point_entries.task_request_id` は null に) → 子に `quest_approved` を通知 |
+| `reject_task_request` | [0004](../supabase/migrations/0004_points_and_rewards.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 申請を `rejected` に(タスクは `open` のまま = 再申請可能) → 子に `quest_rejected` を通知 |
 | `request_reward` | [0011](../supabase/migrations/0011_reward_requests.sql) | `reward_id` | 残高チェック → `reward_redemptions` に `pending` 行を作成(ポイントはまだ減らさない)。生成した申請 id を返す |
-| `approve_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql) | `request_id` | 残高再チェック → 台帳に減算行 → 残高減算 → `rewards.always_visible` に応じて `reward_redemptions` 行 or `rewards` 行を削除 |
-| `reject_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql) | `request_id` | 申請を `rejected` に(プレゼント・ポイントとも変化なし = 再申請可能) |
+| `approve_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 残高再チェック → 台帳に減算行 → 残高減算 → `rewards.always_visible` に応じて `reward_redemptions` 行 or `rewards` 行を削除 → 子に `reward_approved` を通知 |
+| `reject_reward_request` | [0011](../supabase/migrations/0011_reward_requests.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 申請を `rejected` に(プレゼント・ポイントとも変化なし = 再申請可能) → 子に `reward_rejected` を通知 |
 | `recompute_point_balance` | [0004](../supabase/migrations/0004_points_and_rewards.sql) | `target_child_id` | 台帳から残高を再計算して返す(照合用、更新はしない) |
-| `approve_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)で修正 | `request_id`, `points` | 承認者が対象の子と同じグループの親か検証 → 申請を `approved` → `tasks` を生成 → `created_task_id` にリンク。生成した task id を返す |
-| `reject_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)で修正 | `request_id` | 承認者が対象の子と同じグループの親か検証 → 申請を `rejected` に |
+| `approve_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id`, `points` | 承認者が対象の子と同じグループの親か検証 → 申請を `approved` → `tasks` を生成 → `created_task_id` にリンク → 子に `activity_approved` を通知。生成した task id を返す |
+| `reject_activity_request` | [0006](../supabase/migrations/0006_activities.sql)・[0013](../supabase/migrations/0013_activity_fixes.sql)・[0017](../supabase/migrations/0017_notifications.sql)で更新 | `request_id` | 承認者が対象の子と同じグループの親か検証 → 申請を `rejected` に → 子に `activity_rejected` を通知 |
+| `notify_group_parents` | [0017](../supabase/migrations/0017_notifications.sql) | `p_group_id`, `p_kind`, `p_child_id`, `p_payload`, `p_dedupe_key` | 同じグループの親全員に通知を1行ずつ作る(内部用) |
+| `notify_child` | [0017](../supabase/migrations/0017_notifications.sql) | `p_child_id`, `p_kind`, `p_payload` | 特定の子に通知を1行作る(内部用) |
 | `generate_group_code` | [0001](../supabase/migrations/0001_types_and_groups.sql) | — | 未使用の4桁コードを払い出す(内部用) |
 | `screen_time_retention_days` | [0005](../supabase/migrations/0005_screen_time_and_ai.sql) | — | 保持日数を返す。**変更時はここだけ直す** |
 | `purge_old_screen_time` | [0005](../supabase/migrations/0005_screen_time_and_ai.sql) | — | 保持期間より古いスクリーンタイムを削除 |

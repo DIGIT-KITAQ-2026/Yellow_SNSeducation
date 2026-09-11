@@ -159,8 +159,14 @@ Future<void> _showDopagakiExplanation(BuildContext context, AppPalette palette) 
 class DopagakiIndexCard extends StatelessWidget {
   final DopagakiIndex index;
   final bool isLoading;
+  final bool isParent;
 
-  const DopagakiIndexCard({super.key, required this.index, this.isLoading = false});
+  const DopagakiIndexCard({
+    super.key,
+    required this.index,
+    this.isLoading = false,
+    this.isParent = false,
+  });
 
   /// AI講評未生成・スクリーンタイム未取得の間は、`0%` と誤読されないよう
   /// パーセント表記の代わりに「—」を表示する。
@@ -193,7 +199,7 @@ class DopagakiIndexCard extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    '昨日のドパガキ指数',
+                    isParent ? '昨日の依存指数' : '昨日のドパガキ指数',
                     style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
                   ),
                   const SizedBox(width: 6),

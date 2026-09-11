@@ -80,6 +80,16 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// ログイン中の子どもの手持ちポイントを、サーバで確定した残高で上書きする。
+  /// 承認は親の端末で走るため、子ども側は承認通知を受け取るまで残高が古いまま
+  /// になる。[NotificationRealtime] がその通知を受けて呼ぶ。
+  void setChildPointBalance(int balance) {
+    final profile = childProfile;
+    if (profile == null) return;
+    profile.points = balance;
+    notifyListeners();
+  }
+
   /// ログイン中の子どもの `questItems` をサーバから取得した最新の一覧に差し替える。
   /// [ActivityRealtime] が、親が別端末で承認したアクティビティ由来のタスクを
   /// 子ども側に反映するために使う。

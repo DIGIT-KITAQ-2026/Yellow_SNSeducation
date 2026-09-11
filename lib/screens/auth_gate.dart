@@ -1,19 +1,10 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../models/gift_item.dart';
-import '../models/quest_item.dart';
-import '../models/signup_draft.dart';
 import '../models/user_profile.dart';
-import '../services/activity_service.dart';
 import '../services/auth_service.dart';
-import '../services/daily_notification_service.dart';
-import '../services/gift_service.dart';
-import '../services/quest_service.dart';
-import '../services/session_bridge.dart';
+import '../services/session_loader.dart';
 import '../theme/app_colors.dart';
 import '../widgets/primary_button.dart';
 import 'login_screen.dart';
@@ -69,37 +60,7 @@ class _ProfileLoaderState extends State<_ProfileLoader> {
     }
   }
 
-  Future<UserProfile?> _load() async {
-    final profile = await AuthService.fetchProfile();
-    if (profile == null) return null;
-
-    final children = await AuthService.fetchGroupChildren(profile.groupId);
-    // 親のみ、通知ベルに出す未処理の達成申請・交換申請一覧をまとめて取得する。
-    final pendingRequests = profile.role == AccountRole.parent
-        ? await QuestService.fetchPendingRequests(profile.groupId)
-        : const <({String id, String childId, QuestItem item})>[];
-    final pendingExchangeRequests = profile.role == AccountRole.parent
-        ? await GiftService.fetchPendingRequests(profile.groupId)
-        : const <({String id, String childId, GiftItem item})>[];
-    final pendingActivityRequests = profile.role == AccountRole.parent
-        ? await ActivityService.fetchPendingRequests()
-        : const <PendingActivityRequestRow>[];
-    SessionBridge.hydrate(
-      profile: profile,
-      children: children,
-      pendingRequests: pendingRequests,
-      pendingExchangeRequests: pendingExchangeRequests,
-      pendingActivityRequests: pendingActivityRequests,
-      email: AuthService.currentUser?.email,
-    );
-    // ログインを待たせないよう fire-and-forget。失敗しても本筋には影響しない
-    // (DailyNotificationService.syncForSession が内部で例外を握っている)。
-    unawaited(DailyNotificationService.instance.syncForSession(
-      isChild: profile.role == AccountRole.child,
-      childNames: [for (final c in children) c.name],
-    ));
-    return profile;
-  }
+  Future<UserProfile?> _load() => SessionLoader.load(isInitial: true);
 
   @override
   Widget build(BuildContext context) {
