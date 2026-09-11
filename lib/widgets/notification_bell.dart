@@ -117,7 +117,7 @@ class _NotificationBellState extends State<NotificationBell> {
                     style: Theme.of(context)
                         .textTheme
                         .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                        ?.copyWith(fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                   const SizedBox(height: 16),
                   if (achievementRequests.isEmpty &&
@@ -128,7 +128,7 @@ class _NotificationBellState extends State<NotificationBell> {
                       child: Center(
                         child: Text(
                           'お知らせはありません',
-                          style: TextStyle(color: Colors.grey.shade400),
+                          style: TextStyle(color: Colors.black87),
                         ),
                       ),
                     )
@@ -201,7 +201,7 @@ class _NotificationBellState extends State<NotificationBell> {
                     style: Theme.of(context)
                         .textTheme
                         .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                        ?.copyWith(fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                   const SizedBox(height: 16),
                   if (notifications.isEmpty)
@@ -210,7 +210,7 @@ class _NotificationBellState extends State<NotificationBell> {
                       child: Center(
                         child: Text(
                           'お知らせはありません',
-                          style: TextStyle(color: Colors.grey.shade400),
+                          style: TextStyle(color: Colors.black87),
                         ),
                       ),
                     )
@@ -304,7 +304,10 @@ class _NotificationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: Text(title),
+      title: Text(
+        title,
+        style: const TextStyle(color: Colors.black87),
+      ),
       onTap: onTap,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
