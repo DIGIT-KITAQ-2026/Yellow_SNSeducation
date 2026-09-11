@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/app_session.dart';
+import '../theme/theme_controller.dart';
 import '../widgets/account_bar.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'activity_body.dart';
@@ -46,15 +47,30 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     AppSession.instance.addListener(_handleSessionChange);
+    ThemeController.instance.addListener(_handleSessionChange);
+    _ensureThemeLoaded();
   }
 
   @override
   void dispose() {
     AppSession.instance.removeListener(_handleSessionChange);
+    ThemeController.instance.removeListener(_handleSessionChange);
     super.dispose();
   }
 
-  void _handleSessionChange() => setState(() {});
+  void _handleSessionChange() {
+    _ensureThemeLoaded();
+    setState(() {});
+  }
+
+  void _ensureThemeLoaded() {
+    final child = AppSession.instance.childProfile;
+    if (AppSession.instance.isChild && child != null) {
+      ThemeController.instance.loadFor(child);
+    } else if (!AppSession.instance.isChild) {
+      ThemeController.instance.loadForParent();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,9 +78,10 @@ class _MainShellState extends State<MainShell> {
     // ロールが親に変わってタブが減った場合でも範囲外を選ばないようにする。
     // 保存する _index はクランプしない(子に戻ったとき選択位置が復元される)。
     final index = _index.clamp(0, tabs.length - 1);
+    final palette = ThemeController.instance.currentPalette;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0A24),
+      backgroundColor: palette.scaffoldBackground,
       body: SafeArea(
         child: Column(
           children: [

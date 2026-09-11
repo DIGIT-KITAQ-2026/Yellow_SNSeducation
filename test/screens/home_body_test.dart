@@ -84,12 +84,16 @@ void main() {
     expect(find.text('AIによる講評'), findsOneWidget);
   });
 
-  testWidgets('AI講評ボタンで講評が表示される', (tester) async {
+  testWidgets('AI講評は「講評を見る」を押すまで表示されない', (tester) async {
     await tester.pumpWidget(buildApp());
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
 
+    // データ自体はホーム画面表示時に裏側で取得済みだが、本文はボタンを
+    // 押すまで隠されている。
     await tester.scrollUntilVisible(find.text('講評を見る'), 300);
+    expect(find.text('テスト用の講評です。'), findsNothing);
+
     await tester.tap(find.text('講評を見る'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
@@ -115,21 +119,13 @@ void main() {
     );
   });
 
-  testWidgets('ドパガキ指数はAI講評生成前は未算出、生成後はAIの値になる', (tester) async {
+  testWidgets('ドパガキ指数は起動時に自動でAIの値になる', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
-    // 講評生成前: スクリーンタイムはあるがドパガキ指数は「未算出」表示。
-    expect(find.text('未算出'), findsOneWidget);
-    expect(find.text('危険'), findsNothing);
-
-    await tester.scrollUntilVisible(find.text('講評を見る'), 300);
-    await tester.tap(find.text('講評を見る'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
-    // 講評生成後: _FakeAiCommentaryService が返す「危険」に切り替わる。
+    // ホーム画面の表示だけで(「講評を見る」を押さなくても)
+    // _FakeAiCommentaryService が返す「危険」になる。
     expect(find.text('未算出'), findsNothing);
     expect(find.text('危険'), findsOneWidget);
   });

@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Robot Red Heart - Overheated</title>
+  <desc>Single vector SVG of the fourth robot state with X eyes and smoke.</desc>
+
+  <!-- Top smoke -->
+  <path d="M512 285
+           C485 270 476 242 492 220
+           C465 204 468 169 494 157
+           C486 128 512 104 539 114
+           C550 86 584 86 596 112
+           C624 106 644 133 632 158
+           C659 170 661 204 636 218
+           C650 245 628 272 601 267
+           C591 293 554 304 535 282
+           C525 291 518 290 512 285Z"
+        fill="#B5B5B5" stroke="#666" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- Left smoke -->
+  <path d="M170 510
+           C145 491 147 459 172 444
+           C151 420 164 389 192 386
+           C189 356 220 339 242 358
+           C262 337 293 354 290 382
+           C318 389 324 420 302 437
+           C320 462 302 492 276 487
+           C267 515 234 526 214 506
+           C198 519 181 518 170 510Z"
+        fill="#B5B5B5" stroke="#666" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- Right smoke -->
+  <path d="M854 510
+           C829 491 831 459 856 444
+           C835 420 848 389 876 386
+           C873 356 904 339 926 358
+           C946 337 977 354 974 382
+           C1002 389 1008 420 986 437
+           C1004 462 986 492 960 487
+           C951 515 918 526 898 506
+           C882 519 865 518 854 510Z"
+        fill="#B5B5B5" stroke="#666" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- Red antenna block -->
+  <path d="M438 255H586V355H438Z"
+        fill="#FF202A" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M462 258V302M488 258V296"
+        fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Head -->
+  <path d="M365 355H659V565H365Z"
+        fill="#82E0E5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- X eyes -->
+  <path d="M405 422L477 494M477 422L405 494"
+        fill="none" stroke="#111" stroke-width="14" stroke-linecap="round"/>
+  <path d="M547 422L619 494M619 422L547 494"
+        fill="none" stroke="#111" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Body -->
+  <path d="M290 565H734V840H290Z"
+        fill="#82E0E5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Red heart -->
+  <path d="M512 784
+           C478 778 374 722 374 650
+           C374 607 404 581 441 581
+           C474 581 499 601 512 626
+           C525 601 550 581 583 581
+           C620 581 650 607 650 650
+           C650 722 546 778 512 784Z"
+        fill="#FF202A" stroke="#666" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- Left arm -->
+  <path d="M290 600
+           C264 590 240 605 229 631
+           L221 735
+           L282 735
+           C296 692 299 650 290 600Z"
+        fill="#82E0E5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Left claw -->
+  <path d="M221 735
+           C196 740 186 762 190 786
+           L216 789
+           C217 777 224 770 234 774
+           C244 778 247 787 242 796
+           L257 807
+           C276 794 279 771 267 754
+           C257 742 240 736 221 735Z"
+        fill="#CFCFCF" stroke="#666" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- Right arm -->
+  <path d="M734 600
+           C760 590 784 605 795 631
+           L803 735
+           L742 735
+           C728 692 725 650 734 600Z"
+        fill="#82E0E5" stroke="#666" stroke-width="10" stroke-linejoin="round"/>
+
+  <!-- Right claw -->
+  <path d="M803 735
+           C828 740 838 762 834 786
+           L808 789
+           C807 777 800 770 790 774
+           C780 778 777 787 782 796
+           L767 807
+           C748 794 745 771 757 754
+           C767 742 784 736 803 735Z"
+        fill="#CFCFCF" stroke="#666" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- Smoke crossing the heart -->
+  <path d="M653 585
+           C625 602 638 630 663 641
+           C636 657 642 684 666 694
+           C643 710 651 737 675 744
+           C650 763 659 794 686 798
+           C671 817 684 838 707 839
+           C700 816 713 800 719 781
+           C726 760 709 744 695 731
+           C714 710 704 686 684 674
+           C706 652 694 625 676 614
+           C692 598 682 581 653 585Z"
+        fill="#B5B5B5" stroke="#666" stroke-width="8" stroke-linejoin="round"/>
+
+  <!-- Small smoke wisps -->
+  <path d="M236 585C213 566 218 541 239 529C222 509 234 486 256 486"
+        fill="none" stroke="#B5B5B5" stroke-width="18" stroke-linecap="round"/>
+  <path d="M788 585C811 566 806 541 785 529C802 509 790 486 768 486"
+        fill="none" stroke="#B5B5B5" stroke-width="18" stroke-linecap="round"/>
+</svg>

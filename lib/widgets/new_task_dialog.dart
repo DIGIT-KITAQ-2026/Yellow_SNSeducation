@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/quest_item.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import '../utils/numeric_input_formatter.dart';
-
-const _cyan = Color(0xFF33F7FF);
-const _panelColor = Color(0xFF1A1740);
 
 class NewTaskDialog extends StatefulWidget {
   const NewTaskDialog({super.key, this.initial});
@@ -64,18 +63,22 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
     );
   }
 
-  InputDecoration _fieldDecoration(String? label, {EdgeInsetsGeometry? contentPadding}) {
+  InputDecoration _fieldDecoration(
+    AppPalette palette,
+    String? label, {
+    EdgeInsetsGeometry? contentPadding,
+  }) {
     return InputDecoration(
       labelText: label,
-      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+      labelStyle: TextStyle(color: palette.textSecondary),
       contentPadding: contentPadding,
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.06),
+      fillColor: palette.inputFill,
       enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+        borderSide: BorderSide(color: palette.inputBorder),
       ),
-      focusedBorder: const OutlineInputBorder(
-        borderSide: BorderSide(color: _cyan, width: 2),
+      focusedBorder: OutlineInputBorder(
+        borderSide: BorderSide(color: palette.accent, width: 2),
       ),
       border: const OutlineInputBorder(),
     );
@@ -83,11 +86,12 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     return Dialog(
-      backgroundColor: _panelColor,
+      backgroundColor: palette.dialogBackground,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: _cyan.withValues(alpha: 0.4)),
+        side: BorderSide(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.4 : 1)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
@@ -98,7 +102,7 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
             Align(
               alignment: Alignment.topRight,
               child: IconButton(
-                icon: Icon(Icons.close, color: Colors.white.withValues(alpha: 0.7)),
+                icon: Icon(Icons.close, color: palette.textSecondary),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),
@@ -108,18 +112,18 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
               style: Theme.of(context)
                   .textTheme
                   .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                  ?.copyWith(fontWeight: FontWeight.bold, color: palette.textPrimary),
             ),
             const SizedBox(height: 24),
             TextField(
               controller: _titleController,
-              style: const TextStyle(color: Colors.white),
-              decoration: _fieldDecoration('タイトル'),
+              style: TextStyle(color: palette.textPrimary),
+              decoration: _fieldDecoration(palette, 'タイトル'),
             ),
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text('設定ポイント', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                Text('設定ポイント', style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary)),
                 const SizedBox(width: 12),
                 SizedBox(
                   width: 56,
@@ -129,15 +133,15 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
                     keyboardType: TextInputType.number,
                     inputFormatters: [NumericInputFormatter()],
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: palette.textPrimary),
                     onChanged: (_) {
                       if (_pointsError) setState(() => _pointsError = false);
                     },
-                    decoration: _fieldDecoration(null, contentPadding: EdgeInsets.zero),
+                    decoration: _fieldDecoration(palette, null, contentPadding: EdgeInsets.zero),
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Text('Ｐ', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                Text('Ｐ', style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary)),
               ],
             ),
             if (_pointsError) ...[
@@ -150,12 +154,12 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Expanded(
-                  child: Text('詳細', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                Expanded(
+                  child: Text('詳細', style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary)),
                 ),
                 Switch(
                   value: _showDetail,
-                  activeColor: _cyan,
+                  activeColor: palette.accent,
                   onChanged: (value) => setState(() => _showDetail = value),
                 ),
               ],
@@ -165,16 +169,16 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
               TextField(
                 controller: _detailController,
                 maxLines: 3,
-                style: const TextStyle(color: Colors.white),
-                decoration: _fieldDecoration('詳細を入力（任意）'),
+                style: TextStyle(color: palette.textPrimary),
+                decoration: _fieldDecoration(palette, '詳細を入力（任意）'),
               ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _handleComplete,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _cyan,
-                foregroundColor: const Color(0xFF0B0A24),
+                backgroundColor: palette.accent,
+                foregroundColor: palette.accentOn,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

@@ -11,13 +11,12 @@ import '../services/child_notification_registry.dart';
 import '../services/child_registry.dart';
 import '../services/exchange_request_registry.dart';
 import '../services/quest_service.dart';
+import '../theme/app_palette.dart';
+import '../theme/theme_controller.dart';
 import '../widgets/confirm_delete_dialog.dart';
 import '../widgets/futuristic_background.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/new_task_dialog.dart';
-
-const _cyan = Color(0xFF33F7FF);
-const _magenta = Color(0xFFFF3DAE);
 
 class QuestBody extends StatefulWidget {
   const QuestBody({super.key});
@@ -44,6 +43,7 @@ class _QuestBodyState extends State<QuestBody> {
     AchievementRequestRegistry.instance.addListener(_handleRegistryChange);
     ExchangeRequestRegistry.instance.addListener(_handleRegistryChange);
     ActivityRequestRegistry.instance.addListener(_handleRegistryChange);
+    ThemeController.instance.addListener(_handleRegistryChange);
   }
 
   @override
@@ -53,6 +53,7 @@ class _QuestBodyState extends State<QuestBody> {
     AchievementRequestRegistry.instance.removeListener(_handleRegistryChange);
     ExchangeRequestRegistry.instance.removeListener(_handleRegistryChange);
     ActivityRequestRegistry.instance.removeListener(_handleRegistryChange);
+    ThemeController.instance.removeListener(_handleRegistryChange);
     super.dispose();
   }
 
@@ -156,6 +157,7 @@ class _QuestBodyState extends State<QuestBody> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = ThemeController.instance.currentPalette;
     final isChild = AppSession.instance.isChild;
     final profile = _currentProfile;
     return FuturisticBackground(
@@ -164,11 +166,11 @@ class _QuestBodyState extends State<QuestBody> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _PointsCard(points: profile?.points ?? 0),
+            _PointsCard(points: profile?.points ?? 0, palette: palette),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'やることリスト',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
             ),
             const SizedBox(height: 8),
             if (_items.isEmpty)
@@ -178,7 +180,7 @@ class _QuestBodyState extends State<QuestBody> {
                   child: Text(
                     'やることリストはありません',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: palette.textDisabled,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -193,13 +195,14 @@ class _QuestBodyState extends State<QuestBody> {
                       item: item,
                       childProfile: isChild ? profile : null,
                       onRequestAchievement: () => _requestAchievement(item),
+                      palette: palette,
                     ),
                   ),
                   if (!isChild && _isEditing) ...[
                     const SizedBox(width: 8),
-                    _ItemEditButton(onTap: () => _openEditTaskDialog(item)),
+                    _ItemEditButton(onTap: () => _openEditTaskDialog(item), palette: palette),
                     const SizedBox(width: 8),
-                    _DeleteButton(onTap: () => _confirmDelete(item)),
+                    _DeleteButton(onTap: () => _confirmDelete(item), palette: palette),
                   ],
                 ],
               ),
@@ -210,6 +213,7 @@ class _QuestBodyState extends State<QuestBody> {
                 alignment: Alignment.centerRight,
                 child: _EditButton(
                   onTap: () => setState(() => _isEditing = !_isEditing),
+                  palette: palette,
                 ),
               ),
               if (_isEditing) ...[
@@ -220,8 +224,8 @@ class _QuestBodyState extends State<QuestBody> {
                       child: OutlinedButton(
                         onPressed: _openNewTaskDialog,
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: _cyan),
+                          foregroundColor: palette.textPrimary,
+                          side: BorderSide(color: palette.accent),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -235,8 +239,8 @@ class _QuestBodyState extends State<QuestBody> {
                       child: ElevatedButton(
                         onPressed: () => setState(() => _isEditing = false),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _cyan,
-                          foregroundColor: const Color(0xFF0B0A24),
+                          backgroundColor: palette.accent,
+                          foregroundColor: palette.accentOn,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -257,9 +261,10 @@ class _QuestBodyState extends State<QuestBody> {
 }
 
 class _EditButton extends StatelessWidget {
-  const _EditButton({required this.onTap});
+  const _EditButton({required this.onTap, required this.palette});
 
   final VoidCallback onTap;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -271,20 +276,21 @@ class _EditButton extends StatelessWidget {
         height: 40,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: _magenta.withValues(alpha: 0.12),
+          color: palette.accentSecondary.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _magenta.withValues(alpha: 0.6)),
+          border: Border.all(color: palette.accentSecondary.withValues(alpha: 0.6)),
         ),
-        child: const Icon(Icons.edit_outlined, size: 20, color: _magenta),
+        child: Icon(Icons.edit_outlined, size: 20, color: palette.accentSecondary),
       ),
     );
   }
 }
 
 class _ItemEditButton extends StatelessWidget {
-  const _ItemEditButton({required this.onTap});
+  const _ItemEditButton({required this.onTap, required this.palette});
 
   final VoidCallback onTap;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -296,7 +302,7 @@ class _ItemEditButton extends StatelessWidget {
         height: 32,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: palette.isDark ? Colors.white.withValues(alpha: 0.08) : palette.surfaceAlt,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.lightBlueAccent.withValues(alpha: 0.6)),
         ),
@@ -307,9 +313,10 @@ class _ItemEditButton extends StatelessWidget {
 }
 
 class _DeleteButton extends StatelessWidget {
-  const _DeleteButton({required this.onTap});
+  const _DeleteButton({required this.onTap, required this.palette});
 
   final VoidCallback onTap;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +328,7 @@ class _DeleteButton extends StatelessWidget {
         height: 32,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: palette.isDark ? Colors.white.withValues(alpha: 0.08) : palette.surfaceAlt,
           shape: BoxShape.circle,
           border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6)),
         ),
@@ -336,11 +343,13 @@ class _QuestItemBar extends StatefulWidget {
     required this.item,
     required this.childProfile,
     required this.onRequestAchievement,
+    required this.palette,
   });
 
   final QuestItem item;
   final ChildProfile? childProfile;
   final VoidCallback onRequestAchievement;
+  final AppPalette palette;
 
   @override
   State<_QuestItemBar> createState() => _QuestItemBarState();
@@ -351,90 +360,97 @@ class _QuestItemBarState extends State<_QuestItemBar> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = widget.palette;
     final pending = AchievementRequestRegistry.instance.hasPendingRequest(widget.item);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _cyan.withValues(alpha: 0.35)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.item.title,
-                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-                      ),
-                    ),
-                    Text(
-                      '${widget.item.points}P',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: _cyan),
-                    ),
-                  ],
-                ),
-                if (_expanded) ...[
-                  const SizedBox(height: 12),
-                  Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-                  const SizedBox(height: 12),
-                  Text(
-                    widget.item.detail.isEmpty ? '詳細なし' : widget.item.detail,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-                  ),
-                  if (widget.childProfile != null) ...[
-                    const SizedBox(height: 12),
-                    Divider(height: 1, color: Colors.white.withValues(alpha: 0.15)),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton(
-                        onPressed: pending ? null : widget.onRequestAchievement,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _cyan,
-                          disabledBackgroundColor: Colors.white.withValues(alpha: 0.15),
-                          foregroundColor: const Color(0xFF0B0A24),
-                          disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: Text(pending ? '申請中' : '達成'),
-                      ),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          ),
-        ),
+
+    final content = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: palette.isDark ? Colors.white.withValues(alpha: 0.08) : palette.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.cardBorder.withValues(alpha: palette.isDark ? 0.35 : 1)),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.item.title,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
+                ),
+              ),
+              Text(
+                '${widget.item.points}P',
+                style: TextStyle(fontWeight: FontWeight.bold, color: palette.accent),
+              ),
+            ],
+          ),
+          if (_expanded) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: palette.cardBorder.withValues(alpha: 0.3)),
+            const SizedBox(height: 12),
+            Text(
+              widget.item.detail.isEmpty ? '詳細なし' : widget.item.detail,
+              style: TextStyle(color: palette.textSecondary),
+            ),
+            if (widget.childProfile != null) ...[
+              const SizedBox(height: 12),
+              Divider(height: 1, color: palette.cardBorder.withValues(alpha: 0.3)),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton(
+                  onPressed: pending ? null : widget.onRequestAchievement,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: palette.accent,
+                    disabledBackgroundColor: palette.textDisabled,
+                    foregroundColor: palette.accentOn,
+                    disabledForegroundColor: palette.textSecondary,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(pending ? '申請中' : '達成'),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+
+    final decorated = ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: palette.isDark
+          ? BackdropFilter(filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10), child: content)
+          : content,
+    );
+
+    return InkWell(
+      onTap: () => setState(() => _expanded = !_expanded),
+      borderRadius: BorderRadius.circular(12),
+      child: decorated,
     );
   }
 }
 
 class _PointsCard extends StatelessWidget {
-  const _PointsCard({required this.points});
+  const _PointsCard({required this.points, required this.palette});
 
   final int points;
+  final AppPalette palette;
 
   @override
   Widget build(BuildContext context) {
     return GlassCard(
       child: Row(
         children: [
-          const Text(
+          Text(
             '所持ポイント',
-            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+            style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary),
           ),
           const Spacer(),
           Container(
@@ -442,16 +458,16 @@ class _PointsCard extends StatelessWidget {
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              border: Border.all(color: _cyan, width: 2),
+              border: Border.all(color: palette.accent, width: 2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               '$points',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              style: TextStyle(fontWeight: FontWeight.bold, color: palette.textPrimary),
             ),
           ),
           const SizedBox(width: 8),
-          const Text('Point', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+          Text('Point', style: TextStyle(fontWeight: FontWeight.w600, color: palette.textPrimary)),
         ],
       ),
     );
