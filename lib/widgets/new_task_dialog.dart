@@ -159,7 +159,7 @@ class _NewTaskDialogState extends State<NewTaskDialog> {
                 ),
                 Switch(
                   value: _showDetail,
-                  activeThumbColor: palette.accent,
+                  activeColor: palette.accent,
                   onChanged: (value) => setState(() => _showDetail = value),
                 ),
               ],
