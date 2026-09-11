@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/app_notification.dart';
 import 'achievement_request_registry.dart';
+import 'activity_request_registry.dart';
 import 'app_session.dart';
 import 'daily_notification_service.dart';
 import 'exchange_request_registry.dart';
@@ -61,14 +62,42 @@ class NotificationRealtime {
         .subscribe();
   }
 
+  /// 通知の到着を、その端末の手元の状態にも反映する。親と子で見るものが
+  /// 違うので、ロールで振り分ける。
+  void _applySideEffects(AppNotification notification) {
+    if (AppSession.instance.isChild) {
+      _applyChildSideEffects(notification);
+    } else {
+      _applyParentSideEffects(notification);
+    }
+  }
+
+  /// 親の端末に届いた申請の通知を、申請そのものの一覧にも反映する。
+  ///
+  /// `task_requests` / `reward_requests` の行は Realtime で配信していないので、
+  /// 通知だけを受け取っても申請は手元に無い。引き直さないと、通知をタップしても
+  /// 承認/却下ダイアログを開く相手が見つからず、リロードするまで承認できない。
+  void _applyParentSideEffects(AppNotification notification) {
+    switch (notification.kind) {
+      case 'quest_request':
+        unawaited(AchievementRequestRegistry.instance.refreshPending());
+      case 'reward_request':
+        unawaited(ExchangeRequestRegistry.instance.refreshPending());
+      case 'activity_request':
+        // 行そのものは ActivityRealtime が配信する。こちらは取りこぼした
+        // ときの保険。
+        unawaited(ActivityRequestRegistry.instance.refreshPending());
+    }
+  }
+
   /// 承認・却下の結果を、子どもの端末の手元の状態にも反映する。
   ///
   /// 判断は親の端末で走るので、通知が届いた時点が子ども側で結果を知る最初の
   /// タイミングになる。ここで申請を片付けないと「申請中」のままボタンが固まり、
   /// 却下されても再申請できない。
-  void _applySideEffects(AppNotification notification) {
+  void _applyChildSideEffects(AppNotification notification) {
     final profile = AppSession.instance.childProfile;
-    if (profile == null || !AppSession.instance.isChild) return;
+    if (profile == null) return;
 
     final requestId = notification.requestId;
 

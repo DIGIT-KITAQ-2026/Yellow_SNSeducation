@@ -6,6 +6,7 @@ import '../models/activity_request.dart';
 import '../models/activity_suggestion.dart';
 import '../models/child_profile.dart';
 import 'activity_service.dart';
+import 'app_session.dart';
 import 'child_registry.dart';
 import 'notification_registry.dart';
 
@@ -43,6 +44,19 @@ class ActivityRequestRegistry extends ChangeNotifier {
             ),
       ]);
     notifyListeners();
+  }
+
+  /// 親の手元の未処理一覧をサーバから取り直す。達成申請の
+  /// [AchievementRequestRegistry.refreshPending] と同じ役目。おでかけ申請は
+  /// [ActivityRealtime] が行そのものも配信するので通常はここを通らないが、
+  /// その購読を取りこぼしたときの受け皿として通知側からも引けるようにする。
+  Future<void> refreshPending() async {
+    if (AppSession.instance.isChild) return;
+    try {
+      replaceAll(await ActivityService.fetchPendingRequests());
+    } catch (err) {
+      debugPrint('ActivityRequestRegistry.refreshPending failed: $err');
+    }
   }
 
   Future<void> addRequest(ChildProfile childProfile, ActivitySuggestion suggestion) async {

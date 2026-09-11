@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/achievement_request.dart';
 import '../models/child_profile.dart';
 import '../models/quest_item.dart';
+import 'app_session.dart';
 import 'child_registry.dart';
 import 'notification_registry.dart';
 import 'quest_service.dart';
@@ -36,6 +37,23 @@ class AchievementRequestRegistry extends ChangeNotifier {
             AchievementRequest(id: r.id, childProfile: profile, item: r.item),
       ]);
     notifyListeners();
+  }
+
+  /// 親の手元の未処理一覧をサーバから取り直す。Realtime で達成申請の通知が
+  /// 届いた時点では申請そのものはまだこの端末に無いので(通知だけが届く)、
+  /// ここで引き直さないと通知をタップしても承認ダイアログを開けない。
+  ///
+  /// 失敗しても画面は壊さない。引っ張って更新([SessionLoader.load])が
+  /// フォールバックとして残る。
+  Future<void> refreshPending() async {
+    if (AppSession.instance.isChild) return;
+    final groupId = AppSession.instance.groupId;
+    if (groupId == null) return;
+    try {
+      replaceAll(await QuestService.fetchPendingRequests(groupId));
+    } catch (err) {
+      debugPrint('AchievementRequestRegistry.refreshPending failed: $err');
+    }
   }
 
   Future<void> addRequest(ChildProfile childProfile, QuestItem item) async {

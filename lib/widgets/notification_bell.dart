@@ -45,34 +45,63 @@ class _NotificationBellState extends State<NotificationBell> {
 
   List<AppNotification> get _notifications => NotificationRegistry.instance.notifications;
 
-  /// 申請の通知をタップしたときに開く承認/却下ダイアログ。まだ未処理の申請が
-  /// 手元にある場合だけ開き、処理済み(親が別の場所で判断した後など)なら
-  /// 既読にするだけにする。
-  Future<void> _openReview(AppNotification notification) async {
-    final requestId = notification.requestId;
-    if (requestId == null) return;
-
-    Widget? dialog;
+  /// [notification] に対応する未処理の申請から承認/却下ダイアログを組み立てる。
+  /// 申請系でない通知や、処理済み・手元に無い申請では null を返す。
+  Widget? _buildReviewDialog(AppNotification notification, String requestId) {
     switch (notification.kind) {
       case 'quest_request':
         final request = AchievementRequestRegistry.instance.requests
             .where((r) => r.id == requestId && !r.stamped)
             .firstOrNull;
-        if (request != null) dialog = AchievementReviewDialog(request: request);
+        return request == null ? null : AchievementReviewDialog(request: request);
       case 'reward_request':
         final request = ExchangeRequestRegistry.instance.requests
             .where((r) => r.id == requestId && !r.stamped)
             .firstOrNull;
-        if (request != null) dialog = ExchangeReviewDialog(request: request);
+        return request == null ? null : ExchangeReviewDialog(request: request);
       case 'activity_request':
         final request = ActivityRequestRegistry.instance.requests
             .where((r) => r.id == requestId && !r.stamped)
             .firstOrNull;
-        if (request != null) dialog = ActivityReviewDialog(request: request);
+        return request == null ? null : ActivityReviewDialog(request: request);
+      default:
+        return null;
     }
-    if (dialog == null) return;
+  }
+
+  /// 申請の一覧をサーバから取り直す。通知が先に届いて申請が手元に無いときの
+  /// 受け皿(`NotificationRealtime` の再取得を取りこぼした場合など)。
+  Future<void> _refreshRequests(AppNotification notification) {
+    switch (notification.kind) {
+      case 'quest_request':
+        return AchievementRequestRegistry.instance.refreshPending();
+      case 'reward_request':
+        return ExchangeRequestRegistry.instance.refreshPending();
+      case 'activity_request':
+        return ActivityRequestRegistry.instance.refreshPending();
+      default:
+        return Future.value();
+    }
+  }
+
+  /// 申請の通知をタップしたときに開く承認/却下ダイアログ。まだ未処理の申請が
+  /// 手元にある場合だけ開く。手元に無ければ一度だけサーバから取り直してから
+  /// もう一度探す。開けたかどうかを返す(開けなかった通知は既読にしない —
+  /// スタンプを押していないのにチェックが付くのを避けるため)。
+  Future<bool> _openReview(AppNotification notification) async {
+    final requestId = notification.requestId;
+    if (requestId == null) return false;
+
+    var dialog = _buildReviewDialog(notification, requestId);
+    if (dialog == null) {
+      await _refreshRequests(notification);
+      if (!mounted) return false;
+      dialog = _buildReviewDialog(notification, requestId);
+    }
+    if (dialog == null) return false;
 
     await showDialog<void>(context: context, builder: (_) => dialog!);
+    return true;
   }
 
   void _openNotifications() {
@@ -82,9 +111,12 @@ class _NotificationBellState extends State<NotificationBell> {
         builder: (dialogContext, setDialogState) {
           final notifications = _notifications;
 
+          // 承認/却下ダイアログを開けたときは、判断が済んだ時点で各レジストリが
+          // `markReadByRequestId` で既読にする。ここで先に既読にしてしまうと、
+          // まだスタンプを押していない申請にチェックが付いてしまう。
           Future<void> handleTap(AppNotification notification) async {
-            await NotificationRegistry.instance.markRead(notification);
-            await _openReview(notification);
+            final opened = await _openReview(notification);
+            if (!opened) await NotificationRegistry.instance.markRead(notification);
             setDialogState(() {});
           }
 

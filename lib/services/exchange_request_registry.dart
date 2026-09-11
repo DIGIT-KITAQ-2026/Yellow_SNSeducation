@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/child_profile.dart';
 import '../models/exchange_request.dart';
 import '../models/gift_item.dart';
+import 'app_session.dart';
 import 'child_registry.dart';
 import 'gift_service.dart';
 import 'notification_registry.dart';
@@ -35,6 +36,20 @@ class ExchangeRequestRegistry extends ChangeNotifier {
             ExchangeRequest(id: r.id, childProfile: profile, item: r.item),
       ]);
     notifyListeners();
+  }
+
+  /// 親の手元の未処理一覧をサーバから取り直す。達成申請の
+  /// [AchievementRequestRegistry.refreshPending] と同じ役目で、Realtime では
+  /// 通知しか届かない交換申請を、通知をタップする前に手元へ載せる。
+  Future<void> refreshPending() async {
+    if (AppSession.instance.isChild) return;
+    final groupId = AppSession.instance.groupId;
+    if (groupId == null) return;
+    try {
+      replaceAll(await GiftService.fetchPendingRequests(groupId));
+    } catch (err) {
+      debugPrint('ExchangeRequestRegistry.refreshPending failed: $err');
+    }
   }
 
   Future<void> addRequest(ChildProfile childProfile, GiftItem item) async {
