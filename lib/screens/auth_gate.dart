@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -52,7 +53,23 @@ class _ProfileLoader extends StatefulWidget {
 class _ProfileLoaderState extends State<_ProfileLoader> {
   late Future<UserProfile?> _profile = _loadAndHydrate();
 
+  /// 画面には「通信に失敗しました」としか出せない(子どもも見る画面なので生の
+  /// エラーは出さない)ため、原因を追えるようコンソールにだけ残す。ここを通る
+  /// 失敗は通信断・Supabaseの再起動・RLS拒否・スキーマ不一致など種類が幅広く、
+  /// 握り潰すと後から切り分けができなくなる。
   Future<UserProfile?> _loadAndHydrate() async {
+    try {
+      return await _load();
+    } catch (e, stack) {
+      if (kDebugMode) {
+        debugPrint('AuthGate._loadAndHydrate failed: $e');
+        debugPrintStack(stackTrace: stack);
+      }
+      rethrow;
+    }
+  }
+
+  Future<UserProfile?> _load() async {
     final profile = await AuthService.fetchProfile();
     if (profile == null) return null;
 

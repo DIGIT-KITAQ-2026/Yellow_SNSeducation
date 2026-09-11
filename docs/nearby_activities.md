@@ -140,11 +140,19 @@ abstract class LocationService {
 | `serviceDisabled` | 端末の位置情報自体がオフ | 「端末の位置情報がオフになっています。設定から有効にしてください」 |
 | `denied` | 権限を拒否された(web はほぼ常にこちら) | 「位置情報の利用が許可されませんでした。…」 |
 | `deniedForever` | 「今後表示しない」で拒否(Android) | 「位置情報が『許可しない』に設定されています。…」 |
-| `timeout` | 15秒以内に取得できなかった | 「現在地を取得できませんでした。もう一度お試しください」 |
+| `timeout` | 30秒以内に取得できなかった | 「現在地を取得できませんでした。もう一度お試しください」 |
 | `positionUnavailable` | 権限は許可されたが実際の測位に失敗(ブラウザの `POSITION_UNAVAILABLE` 等) | 「現在地を特定できませんでした。時間をおいて、もう一度お試しください」 |
 | `unsupported` | 未対応プラットフォーム等 | 「この端末では現在地を取得できません」 |
 
-精度は `LocationAccuracy.medium`(数百m〜数kmの誤差で十分)。Android は `ACCESS_COARSE_LOCATION` だけで足り、権限ダイアログが「おおよその位置情報」になる。web は `enableHighAccuracy=false` 相当でWi-Fi/IP測位になる(Chrome デスクトップは市区町村〜ISPの所在地レベルまでずれることがある)。
+精度は `LocationAccuracy.medium`(数百m〜数kmの誤差で十分)。web は `enableHighAccuracy=false` 相当でWi-Fi/IP測位になる(Chrome デスクトップは市区町村〜ISPの所在地レベルまでずれることがある)。
+
+**Android は `ACCESS_FINE_LOCATION` と `ACCESS_COARSE_LOCATION` の両方を宣言する。** 精度としては COARSE で足りるが、COARSE だけだと Google Play開発者サービスが無い端末(Playストア無しのエミュレータなど)で必ず失敗する。geolocator はその場合 `FusedLocationProviderClient` ではなく `LocationManager` にフォールバックし、Android 12+ では `FUSED_PROVIDER`、それ未満では `GPS_PROVIDER` を選ぶが、この2つは Android プラットフォーム側で `ACCESS_FINE_LOCATION` が必須であり、COARSE だけでは `requestLocationUpdates` が `SecurityException` を投げる。geolocator はこれを捕捉しないため、例外はそのまま `unsupported`(「この端末では現在地を取得できません」)になる。FINE を宣言しても Android 12+ の権限ダイアログはユーザーが「おおよその位置情報」を選べるため、実際の精度はユーザーが決められる。
+
+**Android には素の `LocationSettings` ではなく `AndroidSettings` を渡す。** `Geolocator.getCurrentPosition` は `locationSettings` が渡されるとそれをそのままプラットフォームへ送るため、素の `LocationSettings` だと Android 固有の設定(`forceLocationManager`・`timeInterval` など)が一切適用されず、ネイティブ側の既定値で動いてしまう。
+
+**タイムアウト時は `getLastKnownPosition()` にフォールバックする。** `getCurrentPosition` は「新しい位置の更新」を待つ実装で、屋内やエミュレータのように測位できない環境では毎回タイムアウトしてしまう。端末がキャッシュしている直前の測位結果が1時間以内のものであればそれを使い、無い/古すぎる場合だけ `timeout` として扱う。フォールバック自体が失敗しても元の `TimeoutException` は握り潰さない。`kDebugMode` では「キャッシュが無い」「古すぎる」「取得自体が失敗」をログで区別できるようにしてある(この3つは原因も対処もまったく違うため)。
+
+**待ち時間は30秒、Android の `intervalDuration` は1秒。** 電源投入直後や屋内では15秒では測位が間に合わないことが実機で確認できたため延長した。`intervalDuration` を指定しないとネイティブ側の既定5秒が使われ、測位できていても最初のコールバックが最大5秒遅れる(1回取れれば終わりなので短くてよい)。
 
 `LocationUnavailableException` は `message`(画面表示用の日本語)とは別に `detail`(開発者向けの原因情報)を持つ。`GeolocatorLocationService` の各 catch 節は、元例外が持つ生のメッセージ(例えば web で `POSITION_UNAVAILABLE` になったときの Chrome 側のエラー文言)を握りつぶさず `detail` に載せ、`kDebugMode` 時にコンソールへログ出力する。原因不明の失敗を「この端末では現在地を取得できません」のような一般的な文言に丸めてしまうと、後から原因を特定できなくなるため。
 

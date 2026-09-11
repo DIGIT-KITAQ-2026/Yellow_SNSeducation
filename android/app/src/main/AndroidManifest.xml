@@ -1,7 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <!-- 周辺アクティビティ提案で、おおよその現在地(市区町村レベル)を取得する。
-         提案の精度には数百m〜数kmの誤差で十分なので FINE は要求しない。 -->
+         提案の精度には数百m〜数kmの誤差で十分だが、COARSE だけでは足りない:
+         Google Play開発者サービスが無い端末(Playストア無しのエミュレータなど)では
+         geolocator が FusedLocationProviderClient ではなく LocationManager に
+         フォールバックし、FUSED_PROVIDER(Android 12+)または GPS_PROVIDER を選ぶ。
+         この2つは ACCESS_FINE_LOCATION が必須で、COARSE だけだと
+         requestLocationUpdates が SecurityException を投げて検索が失敗する。
+         FINE を宣言しても Android 12+ の権限ダイアログはユーザーが
+         「おおよその位置情報」を選べるので、精度は引き続きユーザーが決められる。 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- Supabase / Edge Function への通信。debugビルドでは自動付与されるが、
          releaseビルドでは明示が必要。 -->
